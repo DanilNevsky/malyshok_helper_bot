@@ -99,17 +99,22 @@ bot.onText(/\/activated/, async (msg) => {
 // ─── ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ ──────────────────────────
 
 bot.on('message', async (msg) => {
-  // Блокируем голосовые, кружочки и стикеры
+  const _userId = String(msg.from.id);
+  const _session = getSession(_userId);
+  // Блокируем голосовые, кружочки и стикеры — но сохраняем step сессии
   if (msg.voice || msg.video_note || msg.sticker || msg.audio || msg.video) {
-    await bot.sendMessage(msg.chat.id, 'Я пока умею читать только текст 😊 Напиши свой вопрос словами!');
-    return;
+    const hint = _session.step === 'waiting_question'
+      ? 'Я пока умею читать только текст 😊 Напиши свой вопрос словами!'
+      : 'Я пока умею читать только текст 😊 Напиши мне текстом!';
+    await bot.sendMessage(msg.chat.id, hint);
+    return; // step НЕ меняем — диалог продолжается
   }
   if (!msg.text || msg.text.startsWith('/')) return;
 
-  const userId = String(msg.from.id);
+  const userId = _userId;
   const chatId = msg.chat.id;
   const text = msg.text.trim();
-  const session = getSession(userId);
+  const session = _session;
 
   // ── Онбординг ──────────────────────────────────────────────
 

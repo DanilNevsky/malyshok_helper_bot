@@ -276,7 +276,7 @@ bot.on('message', async (msg) => {
 
   if (text === '📊 Мой профиль') {
     const questionsUsed = getQuestionsUsed(userId);
-    const questionsLeft = Math.max(0, getQuestionsLimit(userId) - questionsUsed);
+    const questionsLeft = Math.max(0, (isTrialActive(user) ? 5 : getQuestionsLimit(userId)) - questionsUsed);
     const subActive = isSubscriptionActive(user);
     const trial = isTrialActive(user);
 
@@ -369,9 +369,12 @@ bot.on('message', async (msg) => {
       return;
     }
     const questionsUsed = getQuestionsUsed(userId);
-    if (questionsUsed >= getQuestionsLimit(userId)) {
+    const effectiveLimit = isTrialActive(user) ? 5 : getQuestionsLimit(userId);
+    if (questionsUsed >= effectiveLimit) {
       await bot.sendMessage(chatId,
-        `${user.momName}, вопросы на этот месяц закончились 💬\n\nМожешь докупить дополнительные прямо сейчас, или подождать — лимит обновится в начале следующего месяца.`,
+        isTrialActive(user)
+          ? `В пробном периоде доступно 5 вопросов — ты использовала все. Оформи подписку и получи 30 вопросов в месяц 💛`
+          : `${user.momName}, вопросы на этот месяц закончились 💬\n\nМожешь докупить дополнительные прямо сейчас, или подождать — лимит обновится в начале следующего месяца.`,
         {
           reply_markup: {
             inline_keyboard: [
@@ -404,7 +407,8 @@ bot.on('message', async (msg) => {
       return;
     }
     const questionsUsed = getQuestionsUsed(userId);
-    if (questionsUsed >= getQuestionsLimit(userId)) {
+    const effectiveLimit = isTrialActive(user) ? 5 : getQuestionsLimit(userId);
+    if (questionsUsed >= effectiveLimit) {
       session.step = 'active';
       await bot.sendMessage(chatId,
         `${user.momName}, вопросы на этот месяц закончились 💬\n\nМожешь докупить дополнительные:`,

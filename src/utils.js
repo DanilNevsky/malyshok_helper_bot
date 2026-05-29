@@ -128,3 +128,37 @@ module.exports = {
   isTrialActive,
   getTrialDaysLeft,
 };
+
+// Склонение имени в родительный падеж через простые правила
+const getNameGenitive = (name) => {
+  if (!name) return name;
+  const n = name.trim();
+  const lower = n.toLowerCase();
+
+  // Женские имена на а/я → меняем окончание
+  if (lower.endsWith('ья')) return n.slice(0, -2) + 'ьи';
+  if (lower.endsWith('ия')) return n.slice(0, -2) + 'ии';
+  if (lower.endsWith('ья')) return n.slice(0, -2) + 'ьи';
+  if (lower.endsWith('я'))  return n.slice(0, -1) + 'и';
+  if (lower.endsWith('а'))  return n.slice(0, -1) + 'ы';
+  if (lower.endsWith('га') || lower.endsWith('ка') || lower.endsWith('ха') ||
+      lower.endsWith('жа') || lower.endsWith('ша') || lower.endsWith('ча') || lower.endsWith('ща')) {
+    return n.slice(0, -1) + 'и';
+  }
+
+  // Мужские имена на согласную → добавляем а
+  if (lower.endsWith('й')) return n.slice(0, -1) + 'я';
+  if (lower.endsWith('ь')) return n.slice(0, -1) + 'я';
+
+  // Проверяем гласные в конце
+  const vowels = ['а','е','ё','и','о','у','ы','э','ю','я'];
+  const lastChar = lower[lower.length - 1];
+  if (!vowels.includes(lastChar)) return n + 'а'; // согласная → +а (Никита → Никиты нет, но Никит+а не то)
+
+  return n; // не изменяем если не знаем
+};
+
+module.exports.getNameGenitive = getNameGenitive;
+
+const getTrialQuestionsLimit = () => 5;
+module.exports.getTrialQuestionsLimit = getTrialQuestionsLimit;

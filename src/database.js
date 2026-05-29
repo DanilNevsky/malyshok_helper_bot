@@ -36,41 +36,31 @@ const getAllUsers = async () => {
   return data.map(mapFromDB);
 };
 
-const incrementQuestions = async (telegramId) => {
+// Добавить вопросы к балансу
+const addQuestions = async (telegramId, amount) => {
   const user = await getUser(telegramId);
   if (!user) return 0;
-  const now = new Date();
-  const lastReset = user.questionsResetAt ? new Date(user.questionsResetAt) : null;
-  let questionsUsed = user.questionsUsed || 0;
-  if (!lastReset || lastReset.getMonth() !== now.getMonth() || lastReset.getFullYear() !== now.getFullYear()) {
-    questionsUsed = 0;
-    await saveUser(telegramId, { questionsResetAt: now.toISOString() });
-  }
-  questionsUsed += 1;
-  await saveUser(telegramId, { questionsUsed });
-  return questionsUsed;
+  const newBalance = (user.questionsBalance || 0) + amount;
+  await saveUser(telegramId, { questionsBalance: newBalance });
+  return newBalance;
 };
 
-const getQuestionsUsed = async (telegramId) => {
+// Использовать один вопрос
+const useQuestion = async (telegramId) => {
   const user = await getUser(telegramId);
   if (!user) return 0;
-  const now = new Date();
-  const lastReset = user.questionsResetAt ? new Date(user.questionsResetAt) : null;
-  if (!lastReset || lastReset.getMonth() !== now.getMonth() || lastReset.getFullYear() !== now.getFullYear()) return 0;
-  return user.questionsUsed || 0;
+  const newBalance = Math.max(0, (user.questionsBalance || 0) - 1);
+  await saveUser(telegramId, { questionsBalance: newBalance });
+  return newBalance;
 };
 
-const getQuestionsLimit = (telegramId) => 30;
-
-const addExtraQuestions = async (telegramId, amount) => {
+// Получить баланс вопросов
+const getQuestionsBalance = async (telegramId) => {
   const user = await getUser(telegramId);
   if (!user) return 0;
-  const extra = (user.extraQuestions || 0) + amount;
-  await saveUser(telegramId, { extraQuestions: extra });
-  return extra;
+  return user.questionsBalance || 0;
 };
 
-// Маппинг из БД в объект приложения
 const mapFromDB = (row) => ({
   telegramId: row.telegram_id,
   momName: row.mom_name,
@@ -81,14 +71,11 @@ const mapFromDB = (row) => ({
   notifyHour: row.notify_hour,
   trialStart: row.trial_start,
   subscriptionEnd: row.subscription_end,
-  questionsUsed: row.questions_used,
-  questionsResetAt: row.questions_reset_at,
-  extraQuestions: row.extra_questions,
+  questionsBalance: row.questions_balance || 0,
   paused: row.paused,
   onboardingComplete: row.onboarding_complete,
 });
 
-// Маппинг из объекта приложения в БД
 const mapToDB = (telegramId, userData, existing) => {
   const merged = { ...(existing || {}), ...userData };
   return {
@@ -101,13 +88,11 @@ const mapToDB = (telegramId, userData, existing) => {
     notify_hour: merged.notifyHour ?? existing?.notifyHour ?? 9,
     trial_start: merged.trialStart ?? existing?.trialStart ?? null,
     subscription_end: merged.subscriptionEnd ?? existing?.subscriptionEnd ?? null,
-    questions_used: merged.questionsUsed ?? existing?.questionsUsed ?? 0,
-    questions_reset_at: merged.questionsResetAt ?? existing?.questionsResetAt ?? null,
-    extra_questions: merged.extraQuestions ?? existing?.extraQuestions ?? 0,
+    questions_balance: merged.questionsBalance ?? existing?.questionsBalance ?? 0,
     paused: merged.paused ?? existing?.paused ?? false,
     onboarding_complete: merged.onboardingComplete ?? existing?.onboardingComplete ?? false,
     updated_at: new Date().toISOString(),
   };
 };
 
-module.exports = { getUser, saveUser, getAllUsers, incrementQuestions, getQuestionsUsed, getQuestionsLimit, addExtraQuestions };
+module.exports = { getUser, saveUser, getAllUsers, addQuestions, useQuestion, getQuestionsBalance };

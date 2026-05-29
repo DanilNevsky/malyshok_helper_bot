@@ -1,7 +1,7 @@
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const cron = require('node-cron');
-const { getUser, saveUser, getAllUsers, incrementQuestions, getQuestionsUsed, getQuestionsLimit } = require('./database');
+const { getUser, saveUser, getAllUsers, addQuestions, useQuestion, getQuestionsBalance } = require('./database');
 const { isSubscriptionActive, isTrialActive, getTrialDaysLeft } = require('./utils');
 const { generateDailyMessage, answerQuestion, generateWelcomeMessage } = require('./claude');
 const { createMonthlyPayment, createYearlyPayment, createQuestionsPayment } = require('./payment');
@@ -212,11 +212,15 @@ bot.on('message', async (msg) => {
       childBirthDate: session.childBirthDate,
       childGender: session.childGender || 'unknown',
       notifyHour: hour,
-      // trialStart пишем только один раз — при первой регистрации
       trialStart: (await getUser(userId) && (await getUser(userId)).trialStart) || new Date().toISOString(),
       onboardingComplete: true,
     });
     session.step = 'active';
+    // Если новый пользователь — даём 5 бесплатных вопросов
+    const existingUser = await getUser(userId);
+    if (!existingUser || existingUser.questionsBalance === 0) {
+      await addQuestions(userId, 5);
+    }
     const savedUser = await getUser(userId);
     await bot.sendMessage(chatId,
       `Всё готово, ${session.momName}! 🎉 Каждый день в ${hour}:00 — новый совет и идея для вас с ${session.childName}.\n\n*У тебя есть 3 дня бесплатного доступа* — включая возможность задавать вопросы.`,
@@ -294,8 +298,7 @@ bot.on('message', async (msg) => {
   }
 
   if (text === '📊 Мой профиль') {
-    const questionsUsed = await getQuestionsUsed(userId);
-    const questionsLeft = Math.max(0, (isTrialActive(user) ? 5 : getQuestionsLimit(userId)) - questionsUsed);
+    const balance = await getQuestionsBalance(userId);
     const subActive = isSubscriptionActive(user);
     const trial = isTrialActive(user);
 
@@ -318,7 +321,7 @@ bot.on('message', async (msg) => {
       `🎂 Дата рождения: ${new Date(user.childBirthDate).toLocaleDateString('ru-RU')}\n` +
       `⏰ Рассылка в: ${user.notifyHour}:00\n\n` +
       `${statusText}\n` +
-      `💬 Вопросов осталось: ${questionsLeft}/${isTrialActive(user) ? 5 : getQuestionsLimit(userId)}`,
+      `💬 Вопросов осталось: ${balance}`,
       { parse_mode: 'Markdown' }
     );
     return;
@@ -337,7 +340,7 @@ bot.on('message', async (msg) => {
       statusBlock = (user.extraQuestions > 0) ? `🆓 *Пробный период:* осталось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'} + куплено ${user.extraQuestions} доп. вопросов\n💬 Вопросов осталось: ${questionsLeft}/${questionsTotal}` : `🆓 *Пробный период:* осталось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'}\n💬 Вопросов в пробном периоде: ${questionsLeft}/5 (после оплаты — 30/мес)`;
     } else if (subActive) {
       const end = new Date(user.subscriptionEnd).toLocaleDateString('ru-RU');
-      statusBlock = `✅ *Подписка активна* до ${end}\n💬 Вопросов осталось: ${questionsLeft}/${questionsTotal}`;
+      statusBlock = `✅ *Подписка активна* до ${end}\n💬 Вопросов осталось: ${balance}`;
     } else {
       statusBlock = `❌ *Подписка не активна*\nЕжедневные сообщения приостановлены`;
     }
@@ -350,10 +353,8 @@ bot.on('message', async (msg) => {
       buttons.push([{ text: '🌟 Оплатить 2 490 ₽/год', callback_data: 'pay_year' }]);
     } else {
       buttons.push([{ text: '🔄 Продлить подписку', callback_data: 'pay_month' }]);
-      if (questionsLeft < 10) {
-        buttons.push([{ text: '💬 Докупить 30 вопросов — 149 ₽', callback_data: 'buy_questions_30' }]);
-        buttons.push([{ text: '💬 Докупить 100 вопросов — 349 ₽', callback_data: 'buy_questions_100' }]);
-      }
+      buttons.push([{ text: '💬 Докупить 30 вопросов — 149 ₽', callback_data: 'buy_questions_30' }]);
+      buttons.push([{ text: '💬 Докупить 100 вопросов — 349 ₽', callback_data: 'buy_questions_100' }]);
     }
 
     await bot.sendMessage(chatId, text2, {
@@ -388,9 +389,8 @@ bot.on('message', async (msg) => {
       });
       return;
     }
-    const questionsUsed = await getQuestionsUsed(userId);
-    const effectiveLimit = (isTrialActive(user) && !(user.extraQuestions > 0)) ? 5 : getQuestionsLimit(userId) + (user.extraQuestions || 0);
-    if (questionsUsed >= effectiveLimit) {
+    const balance = await getQuestionsBalance(userId);
+    if (balance <= 0) {
       await bot.sendMessage(chatId,
         isTrialActive(user)
           ? `В пробном периоде доступно 5 вопросов — ты использовала все. Оформи подписку и получи 30 вопросов в месяц 💛`
@@ -431,12 +431,13 @@ bot.on('message', async (msg) => {
     if (questionsUsed >= effectiveLimit) {
       session.step = 'active';
       await bot.sendMessage(chatId,
-        `${user.momName}, вопросы на этот месяц закончились 💬\n\nМожешь докупить дополнительные:`,
+        `Вопросы закончились 💬 Докупи чтобы продолжить:`,
         {
           reply_markup: {
             inline_keyboard: [
               [{ text: '💬 30 вопросов — 149 ₽', callback_data: 'buy_questions_30' }],
               [{ text: '💬 100 вопросов — 349 ₽', callback_data: 'buy_questions_100' }],
+              [{ text: '💫 Подписка 299 ₽/мес (+30 вопросов)', callback_data: 'pay_month' }],
             ]
           }
         }

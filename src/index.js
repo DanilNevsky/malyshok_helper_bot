@@ -1,0 +1,585 @@
+require('dotenv').config();
+const TelegramBot = require('node-telegram-bot-api');
+const cron = require('node-cron');
+const { getUser, saveUser, getAllUsers, incrementQuestions, getQuestionsUsed, getQuestionsLimit } = require('./database');
+const { isSubscriptionActive, isTrialActive, getTrialDaysLeft } = require('./utils');
+const { generateDailyMessage, answerQuestion, generateWelcomeMessage } = require('./claude');
+
+const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+
+console.log('🤖 Малышок запускается...');
+
+// Хранение состояний пользователей в памяти
+const sessions = {};
+
+const getSession = (userId) => {
+  if (!sessions[userId]) sessions[userId] = { step: 'idle' };
+  return sessions[userId];
+};
+
+// ─── КЛАВИАТУРЫ ──────────────────────────────────────────────
+
+const mainMenu = {
+  reply_markup: {
+    keyboard: [
+      ['📊 Мой профиль', '💬 Спросить Малышка'],
+      ['💳 Подписка', '⚙️ Настройки']
+    ],
+    resize_keyboard: true
+  }
+};
+
+const timeKeyboard = {
+  reply_markup: {
+    keyboard: [
+      ['7:00', '8:00', '9:00'],
+      ['10:00', '11:00', '12:00']
+    ],
+    resize_keyboard: true
+  }
+};
+
+const removeKeyboard = {
+  reply_markup: { remove_keyboard: true }
+};
+
+// ─── КОМАНДА /start ──────────────────────────────────────────
+
+bot.onText(/\/start/, async (msg) => {
+  const userId = String(msg.from.id);
+  const session = getSession(userId);
+  session.step = 'welcome';
+
+  const text = `Привет! 👋 Я *Малышок* — твой ежедневный помощник в воспитании и развитии малыша.
+
+Каждое утро я буду присылать тебе короткое сообщение — игру, совет или интересный факт о том что происходит с твоим ребёнком прямо сейчас. Всё основано на рекомендациях ВОЗ, AAP и проверенных исследованиях.
+
+*Что я умею:*
+🌅 Ежедневные советы под точный возраст малыша
+🎮 Игры и активности которые реально развивают
+👨‍👧 Советы для папы — он тоже важен
+💛 Поддержка для тебя
+
+*Важно:* Я помощник по развитию и воспитанию — не врач. При любых вопросах о здоровье малыша обращайся к педиатру.`;
+
+  await bot.sendMessage(msg.chat.id, text, {
+    parse_mode: 'Markdown',
+    reply_markup: {
+      keyboard: [['🚀 Начать знакомство']],
+      resize_keyboard: true
+    }
+  });
+});
+
+// ─── КОМАНДА /resume ─────────────────────────────────────────
+
+bot.onText(/\/resume/, async (msg) => {
+  const userId = String(msg.from.id);
+  saveUser(userId, { paused: false });
+  await bot.sendMessage(msg.chat.id, 'Рассылка возобновлена ▶️ Жди сообщение завтра утром 💛', mainMenu);
+});
+
+// ─── КОМАНДА /activated (после оплаты) ──────────────────────
+
+bot.onText(/\/activated/, async (msg) => {
+  const userId = String(msg.from.id);
+  const user = getUser(userId);
+  if (!user) return;
+  const end = new Date();
+  end.setMonth(end.getMonth() + 1);
+  saveUser(userId, { subscriptionEnd: end.toISOString() });
+  await bot.sendMessage(msg.chat.id,
+    `${user.momName}, подписка активирована до ${end.toLocaleDateString('ru-RU')} ✅\n\nТеперь ты можешь задавать вопросы — до 30 в месяц 💬`,
+    mainMenu
+  );
+});
+
+// ─── ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ ──────────────────────────
+
+bot.on('message', async (msg) => {
+  if (!msg.text || msg.text.startsWith('/')) return;
+
+  const userId = String(msg.from.id);
+  const chatId = msg.chat.id;
+  const text = msg.text.trim();
+  const session = getSession(userId);
+
+  // ── Онбординг ──────────────────────────────────────────────
+
+  if (text === '🚀 Начать знакомство') {
+    session.step = 'oferta';
+    await bot.sendMessage(chatId,
+      `📄 *Пользовательское соглашение*\n\nПеред началом работы, пожалуйста, прими условия:\n\n• Бот "Малышок" предоставляет информацию о развитии и воспитании детей\n• Бот *не является медицинским сервисом* и не даёт медицинских консультаций\n• Вся информация носит ознакомительный характер\n• При любых вопросах о здоровье ребёнка обращайся к педиатру\n• Информация основана на рекомендациях ВОЗ, AAP и CDC\n• Разработчик не несёт ответственности за решения принятые на основе информации бота`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[{ text: '✅ Принимаю условия', callback_data: 'accept_oferta' }]]
+        }
+      }
+    );
+    return;
+  }
+
+  if (session.step === 'ask_mom_name') {
+    session.momName = text;
+    session.step = 'ask_dad_name';
+    await bot.sendMessage(chatId, `Приятно познакомиться, ${text}! 🌸\n\nКак зовут папу? (или напиши "пропустить" если папы нет рядом)`, removeKeyboard);
+    return;
+  }
+
+  if (session.step === 'ask_dad_name') {
+    session.dadName = text.toLowerCase() === 'пропустить' ? null : text;
+    session.step = 'ask_child_name';
+    await bot.sendMessage(chatId, 'Как зовут вашего малыша? 👶');
+    return;
+  }
+
+  if (session.step === 'ask_child_name') {
+    session.childName = text;
+    session.step = 'ask_child_gender';
+    await bot.sendMessage(chatId, `${text} — какое красивое имя! 🥹\n\nМалыш или малышка?`, {
+      reply_markup: {
+        keyboard: [['👦 Мальчик', '👧 Девочка']],
+        resize_keyboard: true
+      }
+    });
+    return;
+  }
+
+  if (session.step === 'ask_child_gender') {
+    const isBoy = text.includes('Мальчик');
+    session.childGender = isBoy ? 'boy' : 'girl';
+    session.step = 'ask_birth_date';
+    const born = isBoy ? 'родился' : 'родилась';
+    await bot.sendMessage(chatId, `Когда ${born} ${session.childName}? Напиши дату в формате ДД.ММ.ГГГГ\nНапример: 15.03.2024`, {
+      reply_markup: { remove_keyboard: true }
+    });
+    return;
+  }
+
+  if (session.step === 'ask_birth_date') {
+    const dateMatch = text.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (!dateMatch) {
+      await bot.sendMessage(chatId, 'Не получилось распознать дату 😕 Напиши в формате ДД.ММ.ГГГГ\nНапример: 15.03.2024');
+      return;
+    }
+    const [, day, month, year] = dateMatch;
+    const birthDate = new Date(`${year}-${month}-${day}`);
+    if (isNaN(birthDate.getTime()) || birthDate > new Date()) {
+      await bot.sendMessage(chatId, 'Дата выглядит неверной. Проверь и напиши ещё раз 😊');
+      return;
+    }
+    session.childBirthDate = birthDate.toISOString();
+    session.step = 'ask_notify_time';
+    await bot.sendMessage(chatId, 'В котором часу тебе удобно получать ежедневное сообщение? ⏰', timeKeyboard);
+    return;
+  }
+
+  if (session.step === 'ask_notify_time') {
+    const timeMatch = text.match(/^(\d{1,2}):00$/);
+    if (!timeMatch) {
+      await bot.sendMessage(chatId, 'Выбери время из кнопок выше 👆', timeKeyboard);
+      return;
+    }
+    const hour = parseInt(timeMatch[1]);
+    saveUser(userId, {
+      momName: session.momName,
+      dadName: session.dadName,
+      childName: session.childName,
+      childBirthDate: session.childBirthDate,
+      childGender: session.childGender || 'unknown',
+      notifyHour: hour,
+      trialStart: new Date().toISOString(),
+      onboardingComplete: true,
+    });
+    session.step = 'active';
+    const savedUser = getUser(userId);
+    await bot.sendMessage(chatId,
+      `Всё готово, ${session.momName}! 🎉 Каждый день в ${hour}:00 — новый совет и идея для вас с ${session.childName}.\n\n*У тебя есть 3 дня бесплатного доступа* — включая возможность задавать вопросы.`,
+      { parse_mode: 'Markdown', ...mainMenu }
+    );
+    // Сразу шлём первое полезное сообщение
+    try {
+      await bot.sendMessage(chatId, 'А пока — вот кое-что интересное специально для вас прямо сейчас 👇');
+      const firstMessage = await generateWelcomeMessage(savedUser);
+      await bot.sendMessage(chatId, firstMessage);
+    } catch(e) { console.error('first msg error:', e.message); }
+    return;
+  }
+
+  // ── Редактирование данных ───────────────────────────────────
+
+  if (session.step === 'edit_mom_name') {
+    saveUser(userId, { momName: text });
+    session.step = 'active';
+    await bot.sendMessage(chatId, `Имя обновлено на "${text}" ✅`, mainMenu);
+    return;
+  }
+
+  if (session.step === 'edit_dad_name') {
+    const newDadName = text.toLowerCase() === 'пропустить' ? null : text;
+    saveUser(userId, { dadName: newDadName });
+    session.step = 'active';
+    await bot.sendMessage(chatId, newDadName ? `Имя папы обновлено на "${newDadName}" ✅` : 'Имя папы удалено ✅', mainMenu);
+    return;
+  }
+
+  if (session.step === 'edit_child_name') {
+    saveUser(userId, { childName: text });
+    session.step = 'active';
+    await bot.sendMessage(chatId, `Имя ребёнка обновлено на "${text}" ✅`, mainMenu);
+    return;
+  }
+
+  if (session.step === 'edit_birth_date') {
+    const dateMatch = text.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (!dateMatch) {
+      await bot.sendMessage(chatId, 'Формат: ДД.ММ.ГГГГ (например 15.03.2024)');
+      return;
+    }
+    const [, day, month, year] = dateMatch;
+    const birthDate = new Date(`${year}-${month}-${day}`);
+    if (isNaN(birthDate.getTime()) || birthDate > new Date()) {
+      await bot.sendMessage(chatId, 'Дата выглядит неверной, проверь ещё раз');
+      return;
+    }
+    saveUser(userId, { childBirthDate: birthDate.toISOString() });
+    session.step = 'active';
+    await bot.sendMessage(chatId, 'Дата рождения обновлена ✅', mainMenu);
+    return;
+  }
+
+  if (session.step === 'edit_notify_time') {
+    const timeMatch = text.match(/^(\d{1,2}):00$/);
+    if (!timeMatch) {
+      await bot.sendMessage(chatId, 'Выбери время из кнопок', timeKeyboard);
+      return;
+    }
+    saveUser(userId, { notifyHour: parseInt(timeMatch[1]) });
+    session.step = 'active';
+    await bot.sendMessage(chatId, 'Время рассылки обновлено ✅', mainMenu);
+    return;
+  }
+
+  // ── Главное меню ────────────────────────────────────────────
+
+  const user = getUser(userId);
+  if (!user || !user.onboardingComplete) {
+    await bot.sendMessage(chatId, 'Напиши /start чтобы начать 😊');
+    return;
+  }
+
+  if (text === '📊 Мой профиль') {
+    const questionsUsed = getQuestionsUsed(userId);
+    const questionsLeft = Math.max(0, getQuestionsLimit(userId) - questionsUsed);
+    const subActive = isSubscriptionActive(user);
+    const trial = isTrialActive(user);
+
+    let statusText = '';
+    if (trial) {
+      const daysLeft = getTrialDaysLeft(user);
+      statusText = `🆓 Пробный период: осталось ${daysLeft} ${daysLeft === 1 ? 'день' : 'дня'}`;
+    } else if (subActive) {
+      const end = new Date(user.subscriptionEnd).toLocaleDateString('ru-RU');
+      statusText = `✅ Подписка активна до ${end}`;
+    } else {
+      statusText = `❌ Подписка не активна`;
+    }
+
+    await bot.sendMessage(chatId,
+      `*Твой профиль* 👤\n\n` +
+      `👩 Мама: ${user.momName}\n` +
+      `👨 Папа: ${user.dadName || 'не указан'}\n` +
+      `👶 Малыш: ${user.childName}\n` +
+      `🎂 Дата рождения: ${new Date(user.childBirthDate).toLocaleDateString('ru-RU')}\n` +
+      `⏰ Рассылка в: ${user.notifyHour}:00\n\n` +
+      `${statusText}\n` +
+      `💬 Вопросов осталось: ${questionsLeft}/30`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  if (text === '💳 Подписка') {
+    const subActive = isSubscriptionActive(user);
+    const trial = isTrialActive(user);
+    const questionsUsed = getQuestionsUsed(userId);
+    const questionsLeft = Math.max(0, getQuestionsLimit(userId) - questionsUsed);
+
+    let statusBlock = '';
+    if (trial) {
+      const daysLeft = getTrialDaysLeft(user);
+      statusBlock = `🆓 *Пробный период:* осталось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'}\n💬 Вопросов осталось: ${questionsLeft}/30`;
+    } else if (subActive) {
+      const end = new Date(user.subscriptionEnd).toLocaleDateString('ru-RU');
+      statusBlock = `✅ *Подписка активна* до ${end}\n💬 Вопросов осталось: ${questionsLeft}/30`;
+    } else {
+      statusBlock = `❌ *Подписка не активна*\nЕжедневные сообщения приостановлены`;
+    }
+
+    const text2 = `💳 *Подписка Малышок*\n\n${statusBlock}\n\n━━━━━━━━━━━━━━━\n*Тарифы:*\n💫 299 ₽/месяц — ежедневные советы + 30 вопросов\n🌟 2 490 ₽/год — экономия 2 месяца\n━━━━━━━━━━━━━━━\n\nПосле оплаты подписка активируется автоматически.`;
+
+    const buttons = [];
+    if (!subActive || trial) {
+      buttons.push([{ text: '💫 Оплатить 299 ₽/месяц', callback_data: 'pay_month' }]);
+      buttons.push([{ text: '🌟 Оплатить 2 490 ₽/год', callback_data: 'pay_year' }]);
+    } else {
+      buttons.push([{ text: '🔄 Продлить подписку', callback_data: 'pay_month' }]);
+      if (questionsLeft < 10) {
+        buttons.push([{ text: '💬 Докупить 30 вопросов — 149 ₽', callback_data: 'buy_questions_30' }]);
+        buttons.push([{ text: '💬 Докупить 100 вопросов — 349 ₽', callback_data: 'buy_questions_100' }]);
+      }
+    }
+
+    await bot.sendMessage(chatId, text2, {
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: buttons }
+    });
+    return;
+  }
+
+  if (text === '⚙️ Настройки') {
+    await bot.sendMessage(chatId, 'Что хочешь изменить?', {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '👩 Изменить имя мамы', callback_data: 'edit_mom' }],
+          [{ text: '👨 Изменить имя папы', callback_data: 'edit_dad' }],
+          [{ text: '👶 Изменить имя ребёнка', callback_data: 'edit_child' }],
+          [{ text: '🎂 Изменить дату рождения', callback_data: 'edit_date' }],
+          [{ text: '⏰ Изменить время рассылки', callback_data: 'edit_time' }],
+          [{ text: '⏸ Приостановить рассылку', callback_data: 'pause_notify' }],
+        ]
+      }
+    });
+    return;
+  }
+
+  if (text === '💬 Спросить Малышка') {
+    if (!isSubscriptionActive(user)) {
+      await bot.sendMessage(chatId, 'Функция вопрос-ответ доступна подписчикам 💛\n\nОформи подписку чтобы задавать вопросы:', {
+        reply_markup: {
+          inline_keyboard: [[{ text: '💳 Оплатить подписку', callback_data: 'pay_sub' }]]
+        }
+      });
+      return;
+    }
+    const questionsUsed = getQuestionsUsed(userId);
+    if (questionsUsed >= getQuestionsLimit(userId)) {
+      await bot.sendMessage(chatId,
+        `${user.momName}, вопросы на этот месяц закончились 💬\n\nМожешь докупить дополнительные прямо сейчас, или подождать — лимит обновится в начале следующего месяца.`,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '💬 30 вопросов — 149 ₽', callback_data: 'buy_questions_30' }],
+              [{ text: '💬 100 вопросов — 349 ₽', callback_data: 'buy_questions_100' }],
+            ]
+          }
+        }
+      );
+      return;
+    }
+    session.step = 'waiting_question';
+    await bot.sendMessage(chatId, `Слушаю тебя, ${user.momName} 👂 Задай свой вопрос о ${user.childName}:`);
+    return;
+  }
+
+  // ── Ответ на вопрос ─────────────────────────────────────────
+
+  if (session.step === 'waiting_question') {
+    // Выход из диалога по кнопкам меню или команде закончить диалог
+    const exitCommands = ['📊 Мой профиль', '⚙️ Настройки', '💬 Спросить Малышка', '🛑 Закончить диалог', 'закончить диалог', 'выход', '/menu'];
+    if (exitCommands.some(cmd => text.toLowerCase() === cmd.toLowerCase())) {
+      session.step = 'active';
+      await bot.sendMessage(chatId, 'Диалог завершён. Чем могу помочь? 💛', mainMenu);
+      return;
+    }
+    if (!isSubscriptionActive(user)) {
+      session.step = 'active';
+      await bot.sendMessage(chatId, 'Подписка истекла. Оформи новую чтобы задавать вопросы 💛');
+      return;
+    }
+    const questionsUsed = getQuestionsUsed(userId);
+    if (questionsUsed >= getQuestionsLimit(userId)) {
+      session.step = 'active';
+      await bot.sendMessage(chatId,
+        `${user.momName}, вопросы на этот месяц закончились 💬\n\nМожешь докупить дополнительные:`,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '💬 30 вопросов — 149 ₽', callback_data: 'buy_questions_30' }],
+              [{ text: '💬 100 вопросов — 349 ₽', callback_data: 'buy_questions_100' }],
+            ]
+          }
+        }
+      );
+      return;
+    }
+    await bot.sendMessage(chatId, 'Думаю... ⏳');
+    try {
+      const answer = await answerQuestion(user, text);
+      incrementQuestions(userId);
+      const newLeft = Math.max(0, getQuestionsLimit(userId) - getQuestionsUsed(userId));
+      await bot.sendMessage(chatId, answer + `\n\n_💬 Осталось вопросов: ${newLeft}/30_`, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          keyboard: [
+            ['💬 Ещё вопрос', '🛑 Закончить диалог'],
+          ],
+          resize_keyboard: true
+        }
+      });
+    } catch (e) {
+      console.error(e);
+      await bot.sendMessage(chatId, 'Что-то пошло не так, попробуй ещё раз 😕');
+    }
+    // Остаёмся в режиме диалога — мама может сразу задать следующий вопрос
+    // session.step остаётся 'waiting_question'
+    return;
+  }
+});
+
+// ─── CALLBACK КНОПКИ ─────────────────────────────────────────
+
+bot.on('callback_query', async (query) => {
+  const userId = String(query.from.id);
+  const chatId = query.message.chat.id;
+  const session = getSession(userId);
+  const data = query.data;
+
+  await bot.answerCallbackQuery(query.id);
+
+  if (data === 'accept_oferta') {
+    session.step = 'ask_mom_name';
+    await bot.sendMessage(chatId, 'Отлично! Как тебя зовут? 😊', removeKeyboard);
+    return;
+  }
+
+  if (data === 'edit_mom') {
+    session.step = 'edit_mom_name';
+    await bot.sendMessage(chatId, 'Напиши новое имя мамы:');
+    return;
+  }
+
+  if (data === 'edit_dad') {
+    session.step = 'edit_dad_name';
+    await bot.sendMessage(chatId, 'Напиши новое имя папы (или "пропустить"):');
+    return;
+  }
+
+  if (data === 'edit_child') {
+    session.step = 'edit_child_name';
+    await bot.sendMessage(chatId, 'Напиши новое имя ребёнка:');
+    return;
+  }
+
+  if (data === 'edit_date') {
+    session.step = 'edit_birth_date';
+    await bot.sendMessage(chatId, 'Напиши новую дату рождения в формате ДД.ММ.ГГГГ:');
+    return;
+  }
+
+  if (data === 'edit_time') {
+    session.step = 'edit_notify_time';
+    await bot.sendMessage(chatId, 'Выбери новое время рассылки:', timeKeyboard);
+    return;
+  }
+
+  if (data === 'pause_notify') {
+    saveUser(userId, { paused: true });
+    await bot.sendMessage(chatId, 'Рассылка приостановлена ⏸\n\nЧтобы возобновить — напиши /resume');
+    return;
+  }
+
+  if (data === 'pay_month' || data === 'pay_sub') {
+    // TODO: заменить на реальную ссылку ЮКассы после деплоя
+    await bot.sendMessage(chatId,
+      `💳 Оплата 299 ₽/месяц\n\nДля оплаты перейди по ссылке:\n[Оплатить подписку](https://ваша-ссылка-юкассы.ru)\n\nПосле оплаты подписка активируется автоматически.`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  if (data === 'pay_year') {
+    await bot.sendMessage(chatId,
+      `💳 Оплата 2 490 ₽/год\n\nДля оплаты перейди по ссылке:\n[Оплатить годовую подписку](https://ваша-ссылка-юкассы.ru)\n\nПосле оплаты подписка активируется автоматически.`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  if (data === 'buy_questions_30') {
+    await bot.sendMessage(chatId,
+      `💬 *30 дополнительных вопросов — 149 ₽*\n\nПерейди по ссылке для оплаты:\n[Оплатить 149 ₽](https://ваша-ссылка-юкассы.ru)\n\nПосле оплаты вопросы добавятся автоматически.`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  if (data === 'buy_questions_100') {
+    await bot.sendMessage(chatId,
+      `💬 *100 дополнительных вопросов — 349 ₽*\n\nПерейди по ссылке для оплаты:\n[Оплатить 349 ₽](https://ваша-ссылка-юкассы.ru)\n\nПосле оплаты вопросы добавятся автоматически.`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+});
+
+// ─── ЕЖЕДНЕВНАЯ РАССЫЛКА ─────────────────────────────────────
+
+cron.schedule('0 * * * *', async () => {
+  const currentHour = new Date().getHours();
+  const users = getAllUsers();
+
+  for (const user of users) {
+    if (!user.onboardingComplete) continue;
+    if (user.paused) continue;
+    if (user.notifyHour !== currentHour) continue;
+
+    if (!isSubscriptionActive(user)) {
+      if (!isTrialActive(user)) {
+        try {
+          await bot.sendMessage(user.telegramId,
+            `${user.momName}, твой бесплатный период закончился 🌸\n\nНадеюсь эти три дня были полезными! Оформи подписку чтобы продолжить:\n\n💫 299 ₽/месяц\n🌟 2 490 ₽/год`,
+            {
+              reply_markup: {
+                inline_keyboard: [[{ text: '💳 Оплатить подписку', callback_data: 'pay_sub' }]]
+              }
+            }
+          );
+        } catch (e) { console.error(e); }
+      }
+      continue;
+    }
+
+    try {
+      const message = await generateDailyMessage(user);
+      await bot.sendMessage(user.telegramId, message);
+    } catch (e) {
+      console.error(`Ошибка рассылки для ${user.telegramId}:`, e.message);
+    }
+  }
+});
+
+// Напоминание за 3 дня до конца подписки
+cron.schedule('0 10 * * *', async () => {
+  const users = getAllUsers();
+  for (const user of users) {
+    if (!user.subscriptionEnd) continue;
+    const end = new Date(user.subscriptionEnd);
+    const daysLeft = Math.ceil((end - new Date()) / (1000 * 60 * 60 * 24));
+    if (daysLeft === 3) {
+      try {
+        await bot.sendMessage(user.telegramId,
+          `${user.momName}, твоя подписка заканчивается через 3 дня (${end.toLocaleDateString('ru-RU')}) 🔔\n\nПродли чтобы не прерывать ежедневные советы 💛`,
+          {
+            reply_markup: {
+              inline_keyboard: [[{ text: '🔄 Продлить подписку', callback_data: 'pay_sub' }]]
+            }
+          }
+        );
+      } catch (e) { console.error(e); }
+    }
+  }
+});
+
+console.log('🤖 Малышок запущен!');

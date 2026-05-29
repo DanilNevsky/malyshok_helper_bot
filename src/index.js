@@ -329,12 +329,12 @@ bot.on('message', async (msg) => {
     const trial = isTrialActive(user);
     const questionsUsed = await getQuestionsUsed(userId);
     const questionsLeft = Math.max(0, (isTrialActive(user) ? 5 : getQuestionsLimit(userId)) - questionsUsed);
-    const questionsTotal = isTrialActive(user) ? 5 : getQuestionsLimit(userId);
+    const questionsTotal = (isTrialActive(user) && !(user.extraQuestions > 0)) ? 5 : getQuestionsLimit(userId) + (user.extraQuestions || 0);
 
     let statusBlock = '';
     if (trial) {
       const daysLeft = getTrialDaysLeft(user);
-      statusBlock = `🆓 *Пробный период:* осталось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'}\n💬 Вопросов в пробном периоде: ${questionsLeft}/5 (после оплаты — 30/мес)`;
+      statusBlock = (user.extraQuestions > 0) ? `🆓 *Пробный период:* осталось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'} + куплено ${user.extraQuestions} доп. вопросов\n💬 Вопросов осталось: ${questionsLeft}/${questionsTotal}` : `🆓 *Пробный период:* осталось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'}\n💬 Вопросов в пробном периоде: ${questionsLeft}/5 (после оплаты — 30/мес)`;
     } else if (subActive) {
       const end = new Date(user.subscriptionEnd).toLocaleDateString('ru-RU');
       statusBlock = `✅ *Подписка активна* до ${end}\n💬 Вопросов осталось: ${questionsLeft}/${questionsTotal}`;
@@ -389,7 +389,7 @@ bot.on('message', async (msg) => {
       return;
     }
     const questionsUsed = await getQuestionsUsed(userId);
-    const effectiveLimit = isTrialActive(user) ? 5 : getQuestionsLimit(userId);
+    const effectiveLimit = (isTrialActive(user) && !(user.extraQuestions > 0)) ? 5 : getQuestionsLimit(userId) + (user.extraQuestions || 0);
     if (questionsUsed >= effectiveLimit) {
       await bot.sendMessage(chatId,
         isTrialActive(user)
@@ -427,7 +427,7 @@ bot.on('message', async (msg) => {
       return;
     }
     const questionsUsed = await getQuestionsUsed(userId);
-    const effectiveLimit = isTrialActive(user) ? 5 : getQuestionsLimit(userId);
+    const effectiveLimit = (isTrialActive(user) && !(user.extraQuestions > 0)) ? 5 : getQuestionsLimit(userId) + (user.extraQuestions || 0);
     if (questionsUsed >= effectiveLimit) {
       session.step = 'active';
       await bot.sendMessage(chatId,
@@ -454,7 +454,7 @@ bot.on('message', async (msg) => {
         parse_mode: 'Markdown',
         reply_markup: {
           keyboard: [
-            ['💬 Ещё вопрос', '🛑 Закончить диалог'],
+            ['🛑 Закончить диалог'],
           ],
           resize_keyboard: true
         }

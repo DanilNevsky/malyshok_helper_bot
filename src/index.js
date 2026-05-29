@@ -579,19 +579,6 @@ bot.on('callback_query', async (query) => {
 });
 
 
-// ─── БЛОКИРОВКА ГОЛОСОВЫХ И КРУЖОЧКОВ ──────────────────────
-
-bot.on('voice', async (msg) => {
-  await bot.sendMessage(msg.chat.id, 'Голосовые сообщения я пока не понимаю 😊 Напиши текстом — отвечу сразу!');
-});
-
-bot.on('video_note', async (msg) => {
-  await bot.sendMessage(msg.chat.id, 'Кружочки я пока не понимаю 😊 Напиши текстом — отвечу сразу!');
-});
-
-bot.on('sticker', async (msg) => {
-  await bot.sendMessage(msg.chat.id, '😊 Напиши текстом — так я смогу помочь!');
-});
 // ─── ЕЖЕДНЕВНАЯ РАССЫЛКА ─────────────────────────────────────
 
 cron.schedule('0 * * * *', async () => {

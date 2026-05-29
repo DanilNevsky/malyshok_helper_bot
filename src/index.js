@@ -99,6 +99,11 @@ bot.onText(/\/activated/, async (msg) => {
 // ─── ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ ──────────────────────────
 
 bot.on('message', async (msg) => {
+  // Блокируем голосовые, кружочки и стикеры
+  if (msg.voice || msg.video_note || msg.sticker || msg.audio || msg.video) {
+    await bot.sendMessage(msg.chat.id, 'Я пока умею читать только текст 😊 Напиши свой вопрос словами!');
+    return;
+  }
   if (!msg.text || msg.text.startsWith('/')) return;
 
   const userId = String(msg.from.id);
@@ -428,8 +433,10 @@ bot.on('message', async (msg) => {
     try {
       const answer = await answerQuestion(user, text);
       await incrementQuestions(userId);
-      const newLeft = Math.max(0, getQuestionsLimit(userId) - await getQuestionsUsed(userId));
-      await bot.sendMessage(chatId, answer + `\n\n_💬 Осталось вопросов: ${newLeft}/${isTrialActive(user) ? 5 : getQuestionsLimit(userId)}_`, {
+      const newUsed = await getQuestionsUsed(userId);
+      const effectiveLimitAfter = isTrialActive(user) ? 5 : getQuestionsLimit(userId);
+      const newLeft = Math.max(0, effectiveLimitAfter - newUsed);
+      await bot.sendMessage(chatId, answer + `\n\n_💬 Осталось вопросов: ${newLeft}/${effectiveLimitAfter}_`, {
         parse_mode: 'Markdown',
         reply_markup: {
           keyboard: [
@@ -571,6 +578,20 @@ bot.on('callback_query', async (query) => {
   }
 });
 
+
+// ─── БЛОКИРОВКА ГОЛОСОВЫХ И КРУЖОЧКОВ ──────────────────────
+
+bot.on('voice', async (msg) => {
+  await bot.sendMessage(msg.chat.id, 'Голосовые сообщения я пока не понимаю 😊 Напиши текстом — отвечу сразу!');
+});
+
+bot.on('video_note', async (msg) => {
+  await bot.sendMessage(msg.chat.id, 'Кружочки я пока не понимаю 😊 Напиши текстом — отвечу сразу!');
+});
+
+bot.on('sticker', async (msg) => {
+  await bot.sendMessage(msg.chat.id, '😊 Напиши текстом — так я смогу помочь!');
+});
 // ─── ЕЖЕДНЕВНАЯ РАССЫЛКА ─────────────────────────────────────
 
 cron.schedule('0 * * * *', async () => {

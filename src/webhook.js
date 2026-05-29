@@ -75,8 +75,22 @@ app.post('/webhook/yookassa', async (req, res) => {
           );
         } else if (plan === 'questions') {
           await global.bot.sendMessage(userId,
-            `✅ ${questionsAmount} дополнительных вопросов добавлено!\n\nМожешь спрашивать прямо сейчас 💬`
+            `✅ ${questionsAmount} дополнительных вопросов добавлено!\n\nМожешь задать вопрос прямо сейчас 💬`,
+            {
+              reply_markup: {
+                keyboard: [
+                  ['💬 Спросить Малышка'],
+                  ['📊 Мой профиль', '⚙️ Настройки'],
+                  ['💳 Подписка']
+                ],
+                resize_keyboard: true
+              }
+            }
           );
+          // Сбрасываем сессию чтобы мама могла нажать кнопку
+          if (global.sessions) {
+            global.sessions[userId] = { step: 'active' };
+          }
         }
       } catch (e) {
         console.error('Ошибка отправки уведомления:', e.message);

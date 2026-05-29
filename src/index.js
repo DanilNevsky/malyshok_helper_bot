@@ -13,6 +13,7 @@ console.log('🤖 Малышок запускается...');
 
 // Хранение состояний пользователей в памяти
 const sessions = {};
+global.sessions = sessions;
 
 const getSession = (userId) => {
   if (!sessions[userId]) sessions[userId] = { step: 'idle' };
@@ -202,9 +203,7 @@ bot.on('message', async (msg) => {
       childGender: session.childGender || 'unknown',
       notifyHour: hour,
       // trialStart пишем только один раз — при первой регистрации
-      trialStart: (getUser(userId) && getUser(userId).trialStart) || new Date().toISOString(),
-      // questionsUsed НЕ сбрасываем при повторном онбординге
-      questionsUsed: (getUser(userId) && getUser(userId).questionsUsed) || 0,
+      trialStart: (await getUser(userId) && (await getUser(userId)).trialStart) || new Date().toISOString(),
       onboardingComplete: true,
     });
     session.step = 'active';

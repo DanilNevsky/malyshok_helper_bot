@@ -56,6 +56,7 @@ app.post('/webhook/yookassa', async (req, res) => {
       // Добавляем дополнительные вопросы
       const amount = parseInt(questionsAmount || '30');
       await addExtraQuestions(userId, amount);
+      await saveUser(userId, { questionsUsed: 0, questionsResetAt: new Date().toISOString() });
       console.log(`Добавлено ${amount} вопросов для ${userId}`);
     }
 

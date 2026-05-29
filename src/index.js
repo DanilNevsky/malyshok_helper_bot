@@ -63,7 +63,9 @@ bot.onText(/\/start/, async (msg) => {
 👨‍👧 Советы для папы — он тоже важен
 💛 Поддержка для тебя
 
-*Важно:* Я помощник по развитию и воспитанию — не врач. При любых вопросах о здоровье малыша обращайся к педиатру.`;
+*Важно:* Я помощник по развитию и воспитанию — не врач. При любых вопросах о здоровье малыша обращайся к педиатру.
+
+_Если что-то пошло не так — напиши /menu чтобы вернуться в главное меню._`;
 
   await bot.sendMessage(msg.chat.id, text, {
     parse_mode: 'Markdown',
@@ -72,6 +74,14 @@ bot.onText(/\/start/, async (msg) => {
       resize_keyboard: true
     }
   });
+});
+
+// ─── КОМАНДА /menu — сброс в главное меню
+bot.onText(/\/menu/, async (msg) => {
+  const userId = String(msg.from.id);
+  const session = getSession(userId);
+  session.step = 'active';
+  await bot.sendMessage(msg.chat.id, 'Главное меню 💛', mainMenu);
 });
 
 // ─── КОМАНДА /resume ─────────────────────────────────────────

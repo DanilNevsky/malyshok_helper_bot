@@ -299,7 +299,7 @@ bot.on('message', async (msg) => {
       `🎂 Дата рождения: ${new Date(user.childBirthDate).toLocaleDateString('ru-RU')}\n` +
       `⏰ Рассылка в: ${user.notifyHour}:00\n\n` +
       `${statusText}\n` +
-      `💬 Вопросов осталось: ${questionsLeft}/30`,
+      `💬 Вопросов осталось: ${questionsLeft}/${isTrialActive(user) ? 5 : getQuestionsLimit(userId)}`,
       { parse_mode: 'Markdown' }
     );
     return;
@@ -309,15 +309,16 @@ bot.on('message', async (msg) => {
     const subActive = isSubscriptionActive(user);
     const trial = isTrialActive(user);
     const questionsUsed = getQuestionsUsed(userId);
-    const questionsLeft = Math.max(0, getQuestionsLimit(userId) - questionsUsed);
+    const questionsLeft = Math.max(0, (isTrialActive(user) ? 5 : getQuestionsLimit(userId)) - questionsUsed);
+    const questionsTotal = isTrialActive(user) ? 5 : getQuestionsLimit(userId);
 
     let statusBlock = '';
     if (trial) {
       const daysLeft = getTrialDaysLeft(user);
-      statusBlock = `🆓 *Пробный период:* осталось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'}\n💬 Вопросов осталось: ${questionsLeft}/30`;
+      statusBlock = `🆓 *Пробный период:* осталось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'}\n💬 Вопросов в пробном периоде: ${questionsLeft}/5 (после оплаты — 30/мес)`;
     } else if (subActive) {
       const end = new Date(user.subscriptionEnd).toLocaleDateString('ru-RU');
-      statusBlock = `✅ *Подписка активна* до ${end}\n💬 Вопросов осталось: ${questionsLeft}/30`;
+      statusBlock = `✅ *Подписка активна* до ${end}\n💬 Вопросов осталось: ${questionsLeft}/${questionsTotal}`;
     } else {
       statusBlock = `❌ *Подписка не активна*\nЕжедневные сообщения приостановлены`;
     }

@@ -38,7 +38,7 @@ app.post('/webhook/yookassa', async (req, res) => {
         : now;
       const end = new Date(startDate);
       end.setMonth(end.getMonth() + 1);
-      saveUser(userId, { subscriptionEnd: end.toISOString() });
+      saveUser(userId, { subscriptionEnd: end.toISOString(), questionsUsed: 0, questionsResetAt: new Date().toISOString(), extraQuestions: 0 });
       console.log(`Месячная подписка активирована для ${userId} до ${end.toLocaleDateString('ru-RU')}`);
 
     } else if (plan === 'year') {
@@ -49,7 +49,7 @@ app.post('/webhook/yookassa', async (req, res) => {
         : now;
       const end = new Date(startDate);
       end.setFullYear(end.getFullYear() + 1);
-      saveUser(userId, { subscriptionEnd: end.toISOString() });
+      saveUser(userId, { subscriptionEnd: end.toISOString(), questionsUsed: 0, questionsResetAt: new Date().toISOString(), extraQuestions: 0 });
       console.log(`Годовая подписка активирована для ${userId} до ${end.toLocaleDateString('ru-RU')}`);
 
     } else if (plan === 'questions') {

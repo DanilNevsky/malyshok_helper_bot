@@ -77,7 +77,7 @@ bot.onText(/\/start/, async (msg) => {
 
 bot.onText(/\/resume/, async (msg) => {
   const userId = String(msg.from.id);
-  saveUser(userId, { paused: false });
+  await saveUser(userId, { paused: false });
   await bot.sendMessage(msg.chat.id, 'Рассылка возобновлена ▶️ Жди сообщение завтра утром 💛', mainMenu);
 });
 
@@ -85,11 +85,11 @@ bot.onText(/\/resume/, async (msg) => {
 
 bot.onText(/\/activated/, async (msg) => {
   const userId = String(msg.from.id);
-  const user = getUser(userId);
+  const user = await getUser(userId);
   if (!user) return;
   const end = new Date();
   end.setMonth(end.getMonth() + 1);
-  saveUser(userId, { subscriptionEnd: end.toISOString() });
+  await saveUser(userId, { subscriptionEnd: end.toISOString() });
   await bot.sendMessage(msg.chat.id,
     `${user.momName}, подписка активирована до ${end.toLocaleDateString('ru-RU')} ✅\n\nТеперь ты можешь задавать вопросы — до 30 в месяц 💬`,
     mainMenu
@@ -184,7 +184,7 @@ bot.on('message', async (msg) => {
       return;
     }
     const hour = parseInt(timeMatch[1]);
-    saveUser(userId, {
+    await saveUser(userId, {
       momName: session.momName,
       dadName: session.dadName,
       childName: session.childName,
@@ -198,7 +198,7 @@ bot.on('message', async (msg) => {
       onboardingComplete: true,
     });
     session.step = 'active';
-    const savedUser = getUser(userId);
+    const savedUser = await getUser(userId);
     await bot.sendMessage(chatId,
       `Всё готово, ${session.momName}! 🎉 Каждый день в ${hour}:00 — новый совет и идея для вас с ${session.childName}.\n\n*У тебя есть 3 дня бесплатного доступа* — включая возможность задавать вопросы.`,
       { parse_mode: 'Markdown', ...mainMenu }
@@ -215,7 +215,7 @@ bot.on('message', async (msg) => {
   // ── Редактирование данных ───────────────────────────────────
 
   if (session.step === 'edit_mom_name') {
-    saveUser(userId, { momName: text });
+    await saveUser(userId, { momName: text });
     session.step = 'active';
     await bot.sendMessage(chatId, `Имя обновлено на "${text}" ✅`, mainMenu);
     return;
@@ -223,14 +223,14 @@ bot.on('message', async (msg) => {
 
   if (session.step === 'edit_dad_name') {
     const newDadName = text.toLowerCase() === 'пропустить' ? null : text;
-    saveUser(userId, { dadName: newDadName });
+    await saveUser(userId, { dadName: newDadName });
     session.step = 'active';
     await bot.sendMessage(chatId, newDadName ? `Имя папы обновлено на "${newDadName}" ✅` : 'Имя папы удалено ✅', mainMenu);
     return;
   }
 
   if (session.step === 'edit_child_name') {
-    saveUser(userId, { childName: text });
+    await saveUser(userId, { childName: text });
     session.step = 'active';
     await bot.sendMessage(chatId, `Имя ребёнка обновлено на "${text}" ✅`, mainMenu);
     return;
@@ -248,7 +248,7 @@ bot.on('message', async (msg) => {
       await bot.sendMessage(chatId, 'Дата выглядит неверной, проверь ещё раз');
       return;
     }
-    saveUser(userId, { childBirthDate: birthDate.toISOString() });
+    await saveUser(userId, { childBirthDate: birthDate.toISOString() });
     session.step = 'active';
     await bot.sendMessage(chatId, 'Дата рождения обновлена ✅', mainMenu);
     return;
@@ -260,7 +260,7 @@ bot.on('message', async (msg) => {
       await bot.sendMessage(chatId, 'Выбери время из кнопок', timeKeyboard);
       return;
     }
-    saveUser(userId, { notifyHour: parseInt(timeMatch[1]) });
+    await saveUser(userId, { notifyHour: parseInt(timeMatch[1]) });
     session.step = 'active';
     await bot.sendMessage(chatId, 'Время рассылки обновлено ✅', mainMenu);
     return;
@@ -268,14 +268,14 @@ bot.on('message', async (msg) => {
 
   // ── Главное меню ────────────────────────────────────────────
 
-  const user = getUser(userId);
+  const user = await getUser(userId);
   if (!user || !user.onboardingComplete) {
     await bot.sendMessage(chatId, 'Напиши /start чтобы начать 😊');
     return;
   }
 
   if (text === '📊 Мой профиль') {
-    const questionsUsed = getQuestionsUsed(userId);
+    const questionsUsed = await getQuestionsUsed(userId);
     const questionsLeft = Math.max(0, (isTrialActive(user) ? 5 : getQuestionsLimit(userId)) - questionsUsed);
     const subActive = isSubscriptionActive(user);
     const trial = isTrialActive(user);
@@ -308,7 +308,7 @@ bot.on('message', async (msg) => {
   if (text === '💳 Подписка') {
     const subActive = isSubscriptionActive(user);
     const trial = isTrialActive(user);
-    const questionsUsed = getQuestionsUsed(userId);
+    const questionsUsed = await getQuestionsUsed(userId);
     const questionsLeft = Math.max(0, (isTrialActive(user) ? 5 : getQuestionsLimit(userId)) - questionsUsed);
     const questionsTotal = isTrialActive(user) ? 5 : getQuestionsLimit(userId);
 
@@ -369,7 +369,7 @@ bot.on('message', async (msg) => {
       });
       return;
     }
-    const questionsUsed = getQuestionsUsed(userId);
+    const questionsUsed = await getQuestionsUsed(userId);
     const effectiveLimit = isTrialActive(user) ? 5 : getQuestionsLimit(userId);
     if (questionsUsed >= effectiveLimit) {
       await bot.sendMessage(chatId,
@@ -407,7 +407,7 @@ bot.on('message', async (msg) => {
       await bot.sendMessage(chatId, 'Подписка истекла. Оформи новую чтобы задавать вопросы 💛');
       return;
     }
-    const questionsUsed = getQuestionsUsed(userId);
+    const questionsUsed = await getQuestionsUsed(userId);
     const effectiveLimit = isTrialActive(user) ? 5 : getQuestionsLimit(userId);
     if (questionsUsed >= effectiveLimit) {
       session.step = 'active';
@@ -427,8 +427,8 @@ bot.on('message', async (msg) => {
     await bot.sendMessage(chatId, 'Думаю... ⏳');
     try {
       const answer = await answerQuestion(user, text);
-      incrementQuestions(userId);
-      const newLeft = Math.max(0, getQuestionsLimit(userId) - getQuestionsUsed(userId));
+      await incrementQuestions(userId);
+      const newLeft = Math.max(0, getQuestionsLimit(userId) - await getQuestionsUsed(userId));
       await bot.sendMessage(chatId, answer + `\n\n_💬 Осталось вопросов: ${newLeft}/30_`, {
         parse_mode: 'Markdown',
         reply_markup: {
@@ -495,7 +495,7 @@ bot.on('callback_query', async (query) => {
   }
 
   if (data === 'pause_notify') {
-    saveUser(userId, { paused: true });
+    await saveUser(userId, { paused: true });
     await bot.sendMessage(chatId, 'Рассылка приостановлена ⏸\n\nЧтобы возобновить — напиши /resume');
     return;
   }

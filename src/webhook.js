@@ -23,7 +23,7 @@ app.post('/webhook/yookassa', async (req, res) => {
       return res.status(200).json({ ok: true });
     }
 
-    const user = getUser(userId);
+    const user = await getUser(userId);
     if (!user) {
       console.error('Пользователь не найден:', userId);
       return res.status(200).json({ ok: true });
@@ -38,7 +38,7 @@ app.post('/webhook/yookassa', async (req, res) => {
         : now;
       const end = new Date(startDate);
       end.setMonth(end.getMonth() + 1);
-      saveUser(userId, { subscriptionEnd: end.toISOString(), questionsUsed: 0, questionsResetAt: new Date().toISOString(), extraQuestions: 0 });
+      await saveUser(userId, { subscriptionEnd: end.toISOString(), questionsUsed: 0, questionsResetAt: new Date().toISOString(), extraQuestions: 0 });
       console.log(`Месячная подписка активирована для ${userId} до ${end.toLocaleDateString('ru-RU')}`);
 
     } else if (plan === 'year') {
@@ -49,13 +49,13 @@ app.post('/webhook/yookassa', async (req, res) => {
         : now;
       const end = new Date(startDate);
       end.setFullYear(end.getFullYear() + 1);
-      saveUser(userId, { subscriptionEnd: end.toISOString(), questionsUsed: 0, questionsResetAt: new Date().toISOString(), extraQuestions: 0 });
+      await saveUser(userId, { subscriptionEnd: end.toISOString(), questionsUsed: 0, questionsResetAt: new Date().toISOString(), extraQuestions: 0 });
       console.log(`Годовая подписка активирована для ${userId} до ${end.toLocaleDateString('ru-RU')}`);
 
     } else if (plan === 'questions') {
       // Добавляем дополнительные вопросы
       const amount = parseInt(questionsAmount || '30');
-      addExtraQuestions(userId, amount);
+      await addExtraQuestions(userId, amount);
       console.log(`Добавлено ${amount} вопросов для ${userId}`);
     }
 
@@ -64,12 +64,12 @@ app.post('/webhook/yookassa', async (req, res) => {
     if (global.bot) {
       try {
         if (plan === 'month') {
-          const end = new Date(getUser(userId).subscriptionEnd);
+          const end = new Date(await getUser(userId).subscriptionEnd);
           await global.bot.sendMessage(userId,
             `✅ Оплата прошла успешно!\n\nПодписка активна до ${end.toLocaleDateString('ru-RU')} 🎉\n\nТеперь тебе доступно 30 вопросов в месяц. Просто напиши мне — я рядом 💛`
           );
         } else if (plan === 'year') {
-          const end = new Date(getUser(userId).subscriptionEnd);
+          const end = new Date(await getUser(userId).subscriptionEnd);
           await global.bot.sendMessage(userId,
             `✅ Оплата прошла успешно!\n\nГодовая подписка активна до ${end.toLocaleDateString('ru-RU')} 🎉\n\nЦелый год вместе — это здорово! 30 вопросов в месяц уже доступны 💛`
           );

@@ -330,14 +330,14 @@ bot.on('message', async (msg) => {
   if (text === '💳 Подписка') {
     const subActive = isSubscriptionActive(user);
     const trial = isTrialActive(user);
-    const questionsUsed = await getQuestionsUsed(userId);
-    const questionsLeft = Math.max(0, (isTrialActive(user) ? 5 : getQuestionsLimit(userId)) - questionsUsed);
-    const questionsTotal = (isTrialActive(user) && !(user.extraQuestions > 0)) ? 5 : getQuestionsLimit(userId) + (user.extraQuestions || 0);
+    const balance = await getQuestionsBalance(userId);
+    
+    
 
     let statusBlock = '';
     if (trial) {
       const daysLeft = getTrialDaysLeft(user);
-      statusBlock = (user.extraQuestions > 0) ? `🆓 *Пробный период:* осталось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'} + куплено ${user.extraQuestions} доп. вопросов\n💬 Вопросов осталось: ${questionsLeft}/${questionsTotal}` : `🆓 *Пробный период:* осталось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'}\n💬 Вопросов в пробном периоде: ${questionsLeft}/5 (после оплаты — 30/мес)`;
+      statusBlock = `🆓 *Пробный период:* осталось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'}\n💬 Вопросов на балансе: ${balance}`;
     } else if (subActive) {
       const end = new Date(user.subscriptionEnd).toLocaleDateString('ru-RU');
       statusBlock = `✅ *Подписка активна* до ${end}\n💬 Вопросов осталось: ${balance}`;
@@ -426,9 +426,8 @@ bot.on('message', async (msg) => {
       await bot.sendMessage(chatId, 'Подписка истекла. Оформи новую чтобы задавать вопросы 💛');
       return;
     }
-    const questionsUsed = await getQuestionsUsed(userId);
-    const effectiveLimit = (isTrialActive(user) && !(user.extraQuestions > 0)) ? 5 : getQuestionsLimit(userId) + (user.extraQuestions || 0);
-    if (questionsUsed >= effectiveLimit) {
+    const balance = await getQuestionsBalance(userId);
+    if (balance <= 0) {
       session.step = 'active';
       await bot.sendMessage(chatId,
         `Вопросы закончились 💬 Докупи чтобы продолжить:`,
@@ -447,9 +446,7 @@ bot.on('message', async (msg) => {
     await bot.sendMessage(chatId, 'Думаю... ⏳');
     try {
       const answer = await answerQuestion(user, text);
-      await incrementQuestions(userId);
-      const newUsed = await getQuestionsUsed(userId);
-      const effectiveLimitAfter = isTrialActive(user) ? 5 : getQuestionsLimit(userId);
+      const newBalance = await useQuestion(userId);
       const newLeft = Math.max(0, effectiveLimitAfter - newUsed);
       await bot.sendMessage(chatId, answer + `\n\n_💬 Осталось вопросов: ${newLeft}/${effectiveLimitAfter}_`, {
         parse_mode: 'Markdown',

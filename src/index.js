@@ -429,7 +429,7 @@ bot.on('message', async (msg) => {
       const answer = await answerQuestion(user, text);
       await incrementQuestions(userId);
       const newLeft = Math.max(0, getQuestionsLimit(userId) - await getQuestionsUsed(userId));
-      await bot.sendMessage(chatId, answer + `\n\n_💬 Осталось вопросов: ${newLeft}/30_`, {
+      await bot.sendMessage(chatId, answer + `\n\n_💬 Осталось вопросов: ${newLeft}/${isTrialActive(user) ? 5 : getQuestionsLimit(userId)}_`, {
         parse_mode: 'Markdown',
         reply_markup: {
           keyboard: [

@@ -4,6 +4,8 @@ const cron = require('node-cron');
 const { getUser, saveUser, getAllUsers, incrementQuestions, getQuestionsUsed, getQuestionsLimit } = require('./database');
 const { isSubscriptionActive, isTrialActive, getTrialDaysLeft } = require('./utils');
 const { generateDailyMessage, answerQuestion, generateWelcomeMessage } = require('./claude');
+const { createMonthlyPayment, createYearlyPayment, createQuestionsPayment } = require('./payment');
+const { startWebhookServer } = require('./webhook');
 
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 
@@ -491,35 +493,72 @@ bot.on('callback_query', async (query) => {
   }
 
   if (data === 'pay_month' || data === 'pay_sub') {
-    // TODO: заменить на реальную ссылку ЮКассы после деплоя
-    await bot.sendMessage(chatId,
-      `💳 Оплата 299 ₽/месяц\n\nДля оплаты перейди по ссылке:\n[Оплатить подписку](https://ваша-ссылка-юкассы.ru)\n\nПосле оплаты подписка активируется автоматически.`,
-      { parse_mode: 'Markdown' }
-    );
+    try {
+      const payment = await createMonthlyPayment(userId);
+      const url = payment.confirmation.confirmation_url;
+      await bot.sendMessage(chatId,
+        `💳 *Оплата 299 ₽/месяц*\n\nНажми кнопку для оплаты. После оплаты подписка активируется автоматически ✅`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[{ text: '💳 Перейти к оплате', url }]]
+          }
+        }
+      );
+    } catch(e) {
+      console.error('Ошибка создания платежа:', e.message);
+      await bot.sendMessage(chatId, 'Не удалось создать платёж, попробуй чуть позже 😕');
+    }
     return;
   }
 
   if (data === 'pay_year') {
-    await bot.sendMessage(chatId,
-      `💳 Оплата 2 490 ₽/год\n\nДля оплаты перейди по ссылке:\n[Оплатить годовую подписку](https://ваша-ссылка-юкассы.ru)\n\nПосле оплаты подписка активируется автоматически.`,
-      { parse_mode: 'Markdown' }
-    );
+    try {
+      const payment = await createYearlyPayment(userId);
+      const url = payment.confirmation.confirmation_url;
+      await bot.sendMessage(chatId,
+        `💳 *Оплата 2 490 ₽/год*\n\nНажми кнопку для оплаты. После оплаты подписка активируется автоматически ✅`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[{ text: '💳 Перейти к оплате', url }]]
+          }
+        }
+      );
+    } catch(e) {
+      console.error('Ошибка создания платежа:', e.message);
+      await bot.sendMessage(chatId, 'Не удалось создать платёж, попробуй чуть позже 😕');
+    }
     return;
   }
 
   if (data === 'buy_questions_30') {
-    await bot.sendMessage(chatId,
-      `💬 *30 дополнительных вопросов — 149 ₽*\n\nПерейди по ссылке для оплаты:\n[Оплатить 149 ₽](https://ваша-ссылка-юкассы.ru)\n\nПосле оплаты вопросы добавятся автоматически.`,
-      { parse_mode: 'Markdown' }
-    );
+    try {
+      const payment = await createQuestionsPayment(userId, 30);
+      const url = payment.confirmation.confirmation_url;
+      await bot.sendMessage(chatId,
+        `💬 *30 дополнительных вопросов — 149 ₽*\n\nПосле оплаты вопросы добавятся автоматически ✅`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: [[{ text: '💳 Оплатить 149 ₽', url }]] }
+        }
+      );
+    } catch(e) { await bot.sendMessage(chatId, 'Не удалось создать платёж 😕'); }
     return;
   }
 
   if (data === 'buy_questions_100') {
-    await bot.sendMessage(chatId,
-      `💬 *100 дополнительных вопросов — 349 ₽*\n\nПерейди по ссылке для оплаты:\n[Оплатить 349 ₽](https://ваша-ссылка-юкассы.ru)\n\nПосле оплаты вопросы добавятся автоматически.`,
-      { parse_mode: 'Markdown' }
-    );
+    try {
+      const payment = await createQuestionsPayment(userId, 100);
+      const url = payment.confirmation.confirmation_url;
+      await bot.sendMessage(chatId,
+        `💬 *100 дополнительных вопросов — 349 ₽*\n\nПосле оплаты вопросы добавятся автоматически ✅`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: [[{ text: '💳 Оплатить 349 ₽', url }]] }
+        }
+      );
+    } catch(e) { await bot.sendMessage(chatId, 'Не удалось создать платёж 😕'); }
     return;
   }
 });
@@ -583,3 +622,5 @@ cron.schedule('0 10 * * *', async () => {
 });
 
 console.log('🤖 Малышок запущен!');
+global.bot = bot;
+startWebhookServer(process.env.PORT || 3000);

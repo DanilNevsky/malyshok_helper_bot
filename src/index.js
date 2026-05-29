@@ -191,7 +191,10 @@ bot.on('message', async (msg) => {
       childBirthDate: session.childBirthDate,
       childGender: session.childGender || 'unknown',
       notifyHour: hour,
-      trialStart: new Date().toISOString(),
+      // trialStart пишем только один раз — при первой регистрации
+      trialStart: (getUser(userId) && getUser(userId).trialStart) || new Date().toISOString(),
+      // questionsUsed НЕ сбрасываем при повторном онбординге
+      questionsUsed: (getUser(userId) && getUser(userId).questionsUsed) || 0,
       onboardingComplete: true,
     });
     session.step = 'active';

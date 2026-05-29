@@ -447,8 +447,7 @@ bot.on('message', async (msg) => {
     try {
       const answer = await answerQuestion(user, text);
       const newBalance = await useQuestion(userId);
-      const newLeft = Math.max(0, effectiveLimitAfter - newUsed);
-      await bot.sendMessage(chatId, answer + `\n\n_💬 Осталось вопросов: ${newLeft}/${effectiveLimitAfter}_`, {
+      await bot.sendMessage(chatId, answer + `\n\n_💬 Осталось вопросов: ${newBalance}_`, {
         parse_mode: 'Markdown',
         reply_markup: {
           keyboard: [

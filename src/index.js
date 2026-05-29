@@ -575,7 +575,7 @@ bot.on('callback_query', async (query) => {
 
 cron.schedule('0 * * * *', async () => {
   const currentHour = new Date().getHours();
-  const users = getAllUsers();
+  const users = await getAllUsers();
 
   for (const user of users) {
     if (!user.onboardingComplete) continue;
@@ -609,7 +609,7 @@ cron.schedule('0 * * * *', async () => {
 
 // Напоминание за 3 дня до конца подписки
 cron.schedule('0 10 * * *', async () => {
-  const users = getAllUsers();
+  const users = await getAllUsers();
   for (const user of users) {
     if (!user.subscriptionEnd) continue;
     const end = new Date(user.subscriptionEnd);

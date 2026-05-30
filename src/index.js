@@ -635,7 +635,7 @@ bot.on('callback_query', async (query) => {
 
 // ─── ЕЖЕДНЕВНАЯ РАССЫЛКА ─────────────────────────────────────
 
-cron.schedule('* * * * *', async () => {
+cron.schedule('0 7 * * *', async () => {
   const currentHour = new Date().getHours();
   const users = await getAllUsers();
 

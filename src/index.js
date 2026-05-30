@@ -636,30 +636,28 @@ bot.on('callback_query', async (query) => {
 // ─── ЕЖЕДНЕВНАЯ РАССЫЛКА ─────────────────────────────────────
 
 cron.schedule('0 7 * * *', async () => {
-  const currentHour = new Date().getHours();
   const users = await getAllUsers();
 
   for (const user of users) {
     if (!user.onboardingComplete) continue;
     if (user.paused) continue;
-    // TEST MODE: if (user.notifyHour !== currentHour) continue;
 
     if (!isSubscriptionActive(user)) {
-      if (!isTrialActive(user)) {
+      // Триал активен — шлём рассылку
+      if (isTrialActive(user)) {
         try {
-          await bot.sendMessage(user.telegramId,
-            `${user.momName}, твой бесплатный период закончился 🌸\n\nНадеюсь эти три дня были полезными! Оформи подписку чтобы продолжить:\n\n💫 299 ₽/месяц\n🌟 2 490 ₽/год`,
-            {
-              reply_markup: {
-                inline_keyboard: [[{ text: '💳 Оплатить подписку', callback_data: 'pay_sub' }]]
-              }
-            }
-          );
-        } catch (e) { console.error(e); }
+          const message = await generateDailyMessage(user);
+          await bot.sendMessage(user.telegramId, message);
+        } catch (e) {
+          console.error(`Ошибка рассылки для ${user.telegramId}:`, e.message);
+        }
       }
+      // Триал закончился и нет подписки — НЕ шлём рассылку
+      // Уведомление об окончании триала уже было отправлено отдельно
       continue;
     }
 
+    // Подписка активна — шлём рассылку
     try {
       const message = await generateDailyMessage(user);
       await bot.sendMessage(user.telegramId, message);

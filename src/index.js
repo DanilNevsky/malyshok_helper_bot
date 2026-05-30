@@ -32,6 +32,33 @@ const mainMenu = {
   }
 };
 
+const timezoneKeyboard = {
+  reply_markup: {
+    keyboard: [
+      ['🌍 Калининград (UTC+2)', '🌍 Москва / Питер (UTC+3)'],
+      ['🌍 Самара / Удмуртия (UTC+4)', '🌍 Екатеринбург (UTC+5)'],
+      ['🌍 Омск (UTC+6)', '🌍 Новосибирск / Красноярск (UTC+7)'],
+      ['🌍 Иркутск (UTC+8)', '🌍 Якутск (UTC+9)'],
+      ['🌍 Владивосток / Хабаровск (UTC+10)', '🌍 Магадан (UTC+11)'],
+      ['🌍 Камчатка / Чукотка (UTC+12)'],
+    ],
+    resize_keyboard: true
+  }
+};
+
+const timezoneOffsets = {
+  'Калининград': 2, 'Москва': 3, 'Питер': 3, 'Самара': 4, 'Удмуртия': 4,
+  'Екатеринбург': 5, 'Омск': 6, 'Новосибирск': 7, 'Красноярск': 7,
+  'Иркутск': 8, 'Якутск': 9, 'Владивосток': 10, 'Хабаровск': 10,
+  'Магадан': 11, 'Камчатка': 12, 'Чукотка': 12
+};
+
+const getOffsetFromButton = (text) => {
+  const match = text.match(/UTC+(d+)/);
+  if (match) return parseInt(match[1]);
+  return 3; // дефолт Москва
+};
+
 const timeKeyboard = {
   reply_markup: {
     keyboard: [
@@ -195,6 +222,7 @@ bot.on('message', async (msg) => {
     session.childBirthDate = birthDate.toISOString();
     session.step = 'ask_notify_time';
     await bot.sendMessage(chatId, 'В котором часу тебе удобно получать ежедневное сообщение? ⏰', timeKeyboard);
+    
     return;
   }
 
@@ -211,7 +239,8 @@ bot.on('message', async (msg) => {
       childName: session.childName,
       childBirthDate: session.childBirthDate,
       childGender: session.childGender || 'unknown',
-      notifyHour: hour,
+      notifyHour: utcHour,
+      utcOffset: utcOffset,
       trialStart: (await getUser(userId) && (await getUser(userId)).trialStart) || new Date().toISOString(),
       onboardingComplete: true,
     });
@@ -277,13 +306,31 @@ bot.on('message', async (msg) => {
     return;
   }
 
+  if (session.step === 'edit_timezone') {
+    const utcOffset = getOffsetFromButton(text);
+    const user2 = await getUser(userId);
+    if (user2) {
+      // Пересчитываем час рассылки с новым UTC offset
+      const localHour = (user2.notifyHour + (user2.utcOffset || 3)) % 24;
+      const newUtcHour = (localHour - utcOffset + 24) % 24;
+      await saveUser(userId, { utcOffset, notifyHour: newUtcHour });
+    }
+    session.step = 'active';
+    await bot.sendMessage(chatId, 'Регион обновлён ✅', mainMenu);
+    return;
+  }
+
   if (session.step === 'edit_notify_time') {
     const timeMatch = text.match(/^(\d{1,2}):00$/);
     if (!timeMatch) {
       await bot.sendMessage(chatId, 'Выбери время из кнопок', timeKeyboard);
       return;
     }
-    await saveUser(userId, { notifyHour: parseInt(timeMatch[1]) });
+    const localHour = parseInt(timeMatch[1]);
+    const currentUser = await getUser(userId);
+    const utcOffset = currentUser?.utcOffset || 3;
+    const utcHour = (localHour - utcOffset + 24) % 24;
+    await saveUser(userId, { notifyHour: utcHour });
     session.step = 'active';
     await bot.sendMessage(chatId, 'Время рассылки обновлено ✅', mainMenu);
     return;
@@ -373,6 +420,7 @@ bot.on('message', async (msg) => {
           [{ text: '👶 Изменить имя ребёнка', callback_data: 'edit_child' }],
           [{ text: '🎂 Изменить дату рождения', callback_data: 'edit_date' }],
           [{ text: '⏰ Изменить время рассылки', callback_data: 'edit_time' }],
+          [{ text: '🌍 Изменить регион', callback_data: 'edit_timezone' }],
           [{ text: '⏸ Приостановить рассылку', callback_data: 'pause_notify' }],
         ]
       }
@@ -509,6 +557,12 @@ bot.on('callback_query', async (query) => {
   if (data === 'edit_time') {
     session.step = 'edit_notify_time';
     await bot.sendMessage(chatId, 'Выбери новое время рассылки:', timeKeyboard);
+    return;
+  }
+
+  if (data === 'edit_timezone') {
+    session.step = 'edit_timezone';
+    await bot.sendMessage(chatId, 'Выбери свой регион:', timezoneKeyboard);
     return;
   }
 

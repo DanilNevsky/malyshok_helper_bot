@@ -72,6 +72,7 @@ const mapFromDB = (row) => ({
   trialStart: row.trial_start,
   subscriptionEnd: row.subscription_end,
   questionsBalance: row.questions_balance || 0,
+  utcOffset: row.utc_offset || 3,
   paused: row.paused,
   onboardingComplete: row.onboarding_complete,
 });
@@ -89,6 +90,7 @@ const mapToDB = (telegramId, userData, existing) => {
     trial_start: merged.trialStart ?? existing?.trialStart ?? null,
     subscription_end: merged.subscriptionEnd ?? existing?.subscriptionEnd ?? null,
     questions_balance: merged.questionsBalance ?? existing?.questionsBalance ?? 0,
+    utc_offset: merged.utcOffset ?? existing?.utcOffset ?? 3,
     paused: merged.paused ?? existing?.paused ?? false,
     onboarding_complete: merged.onboardingComplete ?? existing?.onboardingComplete ?? false,
     updated_at: new Date().toISOString(),

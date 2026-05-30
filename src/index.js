@@ -40,7 +40,7 @@ const timezoneKeyboard = {
       ['🌍 Омск (UTC+6)', '🌍 Новосибирск / Красноярск (UTC+7)'],
       ['🌍 Иркутск (UTC+8)', '🌍 Якутск (UTC+9)'],
       ['🌍 Владивосток / Хабаровск (UTC+10)', '🌍 Магадан (UTC+11)'],
-      ['🌍 Камчатка / Чукотка (UTC+12)'],
+      ['🌍 Камчатка / Чукотка (UTC+12)', '🌍 Другой регион (UTC+3)'],
     ],
     resize_keyboard: true
   }
@@ -233,7 +233,7 @@ bot.on('message', async (msg) => {
       return;
     }
     session.notifyHour = parseInt(timeMatch[1]);
-    session.step = 'ask_timezone';
+    session.step = 'ask_timezone_onboarding';
     await bot.sendMessage(chatId, 'В каком регионе ты находишься? 🌍', timezoneKeyboard);
     return;
   }

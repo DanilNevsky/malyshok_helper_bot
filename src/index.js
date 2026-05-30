@@ -356,7 +356,7 @@ bot.on('message', async (msg) => {
       `👨 Папа: ${user.dadName || 'не указан'}\n` +
       `👶 Малыш: ${user.childName}\n` +
       `🎂 Дата рождения: ${new Date(user.childBirthDate).toLocaleDateString('ru-RU')}\n` +
-      `⏰ Рассылка в: ${user.notifyHour}:00\n\n` +
+      
       `${statusText}\n` +
       `💬 Вопросов осталось: ${balance}`,
       { parse_mode: 'Markdown' }

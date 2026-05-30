@@ -220,27 +220,13 @@ bot.on('message', async (msg) => {
       return;
     }
     session.childBirthDate = birthDate.toISOString();
-    session.step = 'ask_notify_time';
-    await bot.sendMessage(chatId, 'В котором часу тебе удобно получать ежедневное сообщение? ⏰', timeKeyboard);
-    
-    return;
-  }
-
-  if (session.step === 'ask_notify_time') {
-    const timeMatch = text.match(/^(\d{1,2}):00$/);
-    if (!timeMatch) {
-      await bot.sendMessage(chatId, 'Выбери время из кнопок выше 👆', timeKeyboard);
-      return;
-    }
-    session.notifyHour = parseInt(timeMatch[1]);
     session.step = 'ask_timezone_onboarding';
-    await bot.sendMessage(chatId, 'В каком регионе ты находишься? 🌍', timezoneKeyboard);
     return;
   }
 
   if (session.step === 'ask_timezone_onboarding') {
-    const utcOffset = getOffsetFromButton(text);
-    const utcHour = (session.notifyHour - utcOffset + 24) % 24;
+    const utcOffset = 3;
+    const utcHour = 7;
     await saveUser(userId, {
       momName: session.momName,
       dadName: session.dadName,

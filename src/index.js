@@ -260,7 +260,7 @@ bot.on('message', async (msg) => {
     }
     const savedUser = await getUser(userId);
     await bot.sendMessage(chatId,
-      `Всё готово, ${session.momName}! 🎉 Каждый день в ${session.notifyHour}:00 — новый совет и идея для вас с ${session.childName}.\n\n*У тебя есть 3 дня бесплатного доступа* — включая возможность задавать вопросы.`,
+      `Всё готово, ${session.momName}! 🎉 Каждый день утром — новый совет и идея для вас с ${session.childName}.\n\n*У тебя есть 3 дня бесплатного доступа* — включая возможность задавать вопросы.`,
       { parse_mode: 'Markdown', ...mainMenu }
     );
     // Сразу шлём первое полезное сообщение
@@ -427,8 +427,7 @@ bot.on('message', async (msg) => {
           [{ text: '👨 Изменить имя папы', callback_data: 'edit_dad' }],
           [{ text: '👶 Изменить имя ребёнка', callback_data: 'edit_child' }],
           [{ text: '🎂 Изменить дату рождения', callback_data: 'edit_date' }],
-          [{ text: '⏰ Изменить время рассылки', callback_data: 'edit_time' }],
-          [{ text: '🌍 Изменить регион', callback_data: 'edit_timezone' }],
+          
           [{ text: '⏸ Приостановить рассылку', callback_data: 'pause_notify' }],
         ]
       }

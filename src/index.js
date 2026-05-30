@@ -635,14 +635,14 @@ bot.on('callback_query', async (query) => {
 
 // ─── ЕЖЕДНЕВНАЯ РАССЫЛКА ─────────────────────────────────────
 
-cron.schedule('0 * * * *', async () => {
+cron.schedule('* * * * *', async () => {
   const currentHour = new Date().getHours();
   const users = await getAllUsers();
 
   for (const user of users) {
     if (!user.onboardingComplete) continue;
     if (user.paused) continue;
-    if (user.notifyHour !== currentHour) continue;
+    // TEST MODE: if (user.notifyHour !== currentHour) continue;
 
     if (!isSubscriptionActive(user)) {
       if (!isTrialActive(user)) {

@@ -13,6 +13,56 @@ const CONSTITUTION = `
 Эмодзи используешь умеренно — для тепла, не для пестроты.
 `;
 
+
+// Определить текущий сезон
+const getSeason = () => {
+  const month = new Date().getMonth() + 1;
+  if ([12, 1, 2].includes(month)) return 'зима';
+  if ([3, 4, 5].includes(month)) return 'весна';
+  if ([6, 7, 8].includes(month)) return 'лето';
+  return 'осень';
+};
+
+// Проверить есть ли сегодня праздник
+const getHoliday = () => {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const day = now.getDate();
+  if (month === 3 && day === 8) return '8 Марта — Международный женский день';
+  if (month === 6 && day === 1) return '1 июня — Международный день защиты детей';
+  // День матери — последнее воскресенье ноября
+  if (month === 11) {
+    const lastSunday = new Date(now.getFullYear(), 11, 0);
+    while (lastSunday.getDay() !== 0) lastSunday.setDate(lastSunday.getDate() - 1);
+    if (day === lastSunday.getDate()) return 'День матери';
+  }
+  // День отца — третье воскресенье июня
+  if (month === 6) {
+    let sundays = 0;
+    for (let d = 1; d <= 30; d++) {
+      const date = new Date(now.getFullYear(), 5, d);
+      if (date.getDay() === 0) sundays++;
+      if (sundays === 3 && d === day) return 'День отца';
+    }
+  }
+  return null;
+};
+
+// Проверить этапную дату
+const getMilestone = (ageInDays) => {
+  const milestones = {
+    30: '1 месяц',
+    90: '3 месяца',
+    180: '6 месяцев',
+    365: '1 год',
+    548: '1.5 года',
+    730: '2 года',
+    1095: '3 года',
+    1460: '4 года',
+    1825: '5 лет',
+  };
+  return milestones[ageInDays] || null;
+};
 // Генерация ежедневного сообщения
 const generateDailyMessage = async (user) => {
   const ageInDays = getAgeInDays(user.childBirthDate);

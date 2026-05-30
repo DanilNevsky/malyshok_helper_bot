@@ -232,7 +232,15 @@ bot.on('message', async (msg) => {
       await bot.sendMessage(chatId, 'Выбери время из кнопок выше 👆', timeKeyboard);
       return;
     }
-    const hour = parseInt(timeMatch[1]);
+    session.notifyHour = parseInt(timeMatch[1]);
+    session.step = 'ask_timezone';
+    await bot.sendMessage(chatId, 'В каком регионе ты находишься? 🌍', timezoneKeyboard);
+    return;
+  }
+
+  if (session.step === 'ask_timezone_onboarding') {
+    const utcOffset = getOffsetFromButton(text);
+    const utcHour = (session.notifyHour - utcOffset + 24) % 24;
     await saveUser(userId, {
       momName: session.momName,
       dadName: session.dadName,
@@ -252,7 +260,7 @@ bot.on('message', async (msg) => {
     }
     const savedUser = await getUser(userId);
     await bot.sendMessage(chatId,
-      `Всё готово, ${session.momName}! 🎉 Каждый день в ${hour}:00 — новый совет и идея для вас с ${session.childName}.\n\n*У тебя есть 3 дня бесплатного доступа* — включая возможность задавать вопросы.`,
+      `Всё готово, ${session.momName}! 🎉 Каждый день в ${session.notifyHour}:00 — новый совет и идея для вас с ${session.childName}.\n\n*У тебя есть 3 дня бесплатного доступа* — включая возможность задавать вопросы.`,
       { parse_mode: 'Markdown', ...mainMenu }
     );
     // Сразу шлём первое полезное сообщение

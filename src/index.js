@@ -220,11 +220,7 @@ bot.on('message', async (msg) => {
       return;
     }
     session.childBirthDate = birthDate.toISOString();
-    session.step = 'ask_timezone_onboarding';
-    return;
-  }
-
-  if (session.step === 'ask_timezone_onboarding') {
+    // Сразу сохраняем — время и регион фиксированные
     const utcOffset = 3;
     const utcHour = 7;
     await saveUser(userId, {

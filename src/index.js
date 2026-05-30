@@ -9,6 +9,7 @@ const { startWebhookServer } = require('./webhook');
 
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 
+
 console.log('🤖 Малышок запускается...');
 
 // Хранение состояний пользователей в памяти
@@ -26,7 +27,8 @@ const mainMenu = {
   reply_markup: {
     keyboard: [
       ['📊 Мой профиль', '💬 Спросить Малышка'],
-      ['💳 Подписка', '⚙️ Настройки']
+      ['💳 Подписка', '⚙️ Настройки'],
+      ['📞 Поддержка']
     ],
     resize_keyboard: true
   }
@@ -401,6 +403,14 @@ bot.on('message', async (msg) => {
     return;
   }
 
+  if (text === '📞 Поддержка') {
+    await bot.sendMessage(chatId,
+      `📞 *Поддержка Малышок*\n\nЕсли у тебя есть вопрос, предложение или ты хочешь запросить возврат — напиши нам напрямую:\n\n👉 @DanilNevsky\n\nОтвечаем в течение 24 часов 💛`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
   if (text === '⚙️ Настройки') {
     await bot.sendMessage(chatId, 'Что хочешь изменить?', {
       reply_markup: {
@@ -687,6 +697,45 @@ cron.schedule('0 10 * * *', async () => {
       } catch (e) { console.error(e); }
     }
   }
+});
+
+
+// ─── АДМИН: ТВОЙ TELEGRAM ID ────────────────────────────────
+const ADMIN_ID = '271033356';
+
+// ─── КОМАНДА /broadcast ─────────────────────────────────────
+bot.onText(/\/broadcast (.+)/, async (msg, match) => {
+  if (String(msg.from.id) !== ADMIN_ID) {
+    await bot.sendMessage(msg.chat.id, 'Нет доступа');
+    return;
+  }
+  const broadcastText = match[1];
+  const allUsers = await getAllUsers();
+  let sent = 0;
+  let failed = 0;
+  await bot.sendMessage(msg.chat.id, `Начинаю рассылку для ${allUsers.length} пользователей...`);
+  for (const u of allUsers) {
+    if (!u.onboardingComplete) continue;
+    try {
+      await bot.sendMessage(u.telegramId, broadcastText, { parse_mode: 'Markdown' });
+      sent++;
+      await new Promise(r => setTimeout(r, 50));
+    } catch (e) { failed++; }
+  }
+  await bot.sendMessage(msg.chat.id, `✅ Готово! Отправлено: ${sent}, ошибок: ${failed}`);
+});
+
+// ─── КОМАНДА /stats ──────────────────────────────────────────
+bot.onText(/\/stats/, async (msg) => {
+  if (String(msg.from.id) !== ADMIN_ID) return;
+  const allUsers = await getAllUsers();
+  const activeSubs = allUsers.filter(u => isSubscriptionActive(u)).length;
+  const trialUsers = allUsers.filter(u => isTrialActive(u)).length;
+  const expired = allUsers.filter(u => !isSubscriptionActive(u) && !isTrialActive(u)).length;
+  await bot.sendMessage(msg.chat.id,
+    `📊 *Статистика Малышок*\n\n👥 Всего: ${allUsers.length}\n✅ Подписок: ${activeSubs}\n🆓 Триал: ${trialUsers}\n❌ Без подписки: ${expired}`,
+    { parse_mode: 'Markdown' }
+  );
 });
 
 console.log('🤖 Малышок запущен!');

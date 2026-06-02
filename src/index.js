@@ -458,7 +458,6 @@ bot.on('message', async (msg) => {
           [{ text: '🎂 Изменить дату рождения', callback_data: 'edit_date' }],
           
           [{ text: '⏰ Настроить время рассылки', callback_data: 'edit_time_new' }],
-          [{ text: '⏸ Приостановить рассылку', callback_data: 'pause_notify' }],
         ]
       }
     });

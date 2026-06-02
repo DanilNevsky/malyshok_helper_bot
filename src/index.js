@@ -112,7 +112,7 @@ bot.onText(/\/menu/, async (msg) => {
   const userId = String(msg.from.id);
   const session = getSession(userId);
   session.step = 'active';
-  await bot.sendMessage(msg.chat.id, 'Главное меню 💛', mainMenu);
+  await bot.sendMessage(msg.chat.id, '«Малышок» перезапущен 👌', mainMenu);
 });
 
 // ─── КОМАНДА /resume ─────────────────────────────────────────

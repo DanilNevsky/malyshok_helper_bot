@@ -4,6 +4,8 @@ const cron = require('node-cron');
 const { getUser, saveUser, getAllUsers, addQuestions, useQuestion, getQuestionsBalance } = require('./database');
 const { isSubscriptionActive, isTrialActive, getTrialDaysLeft } = require('./utils');
 const { generateDailyMessage, answerQuestion, generateWelcomeMessage } = require('./claude');
+const { findTimezone } = require('./timezones');
+const { DateTime } = require('luxon');
 const { createMonthlyPayment, createYearlyPayment, createQuestionsPayment } = require('./payment');
 const { startWebhookServer } = require('./webhook');
 
@@ -265,6 +267,41 @@ bot.on('message', async (msg) => {
     return;
   }
 
+  if (session.step === 'edit_notify_hour') {
+    const timeMatch = text.match(/^(\d{1,2}):00$/);
+    if (!timeMatch) {
+      await bot.sendMessage(chatId, 'Выбери время из кнопок или напиши в формате 8:00', {
+        reply_markup: {
+          keyboard: [['7:00', '8:00', '9:00', '10:00'], ['11:00', '12:00', '18:00', '20:00']],
+          resize_keyboard: true
+        }
+      });
+      return;
+    }
+    session.pendingHour = parseInt(timeMatch[1]);
+    session.step = 'edit_region';
+    await bot.sendMessage(chatId, 'Теперь напиши свой регион или город — это нужно чтобы правильно настроить время рассылки 🌍\n\nНапример: Москва, Новосибирская область, Екатеринбург, Казань', {
+      reply_markup: { remove_keyboard: true }
+    });
+    return;
+  }
+
+  if (session.step === 'edit_region') {
+    const tz = findTimezone(text);
+    if (!tz) {
+      await bot.sendMessage(chatId, 'Не смог определить регион 😕 Попробуй написать по-другому — например "Московская область", "Новосибирск", "Екатеринбург"');
+      return;
+    }
+    // Конвертируем локальный час в UTC
+    const now = DateTime.now().setZone(tz);
+    const offsetHours = now.offset / 60;
+    const utcHour = ((session.pendingHour - offsetHours) + 24) % 24;
+    await saveUser(userId, { notifyHour: Math.round(utcHour), utcOffset: offsetHours, timezone: tz });
+    session.step = 'active';
+    await bot.sendMessage(chatId, `✅ Готово! Буду присылать сообщения в ${session.pendingHour}:00 по твоему времени 💛`, mainMenu);
+    return;
+  }
+
   if (session.step === 'edit_dad_name') {
     const newDadName = text.toLowerCase() === 'пропустить' ? null : text;
     await saveUser(userId, { dadName: newDadName });
@@ -405,7 +442,7 @@ bot.on('message', async (msg) => {
 
   if (text === '📞 Поддержка') {
     await bot.sendMessage(chatId,
-      `📞 *Поддержка Малышок*\n\nЕсли у тебя есть вопрос, предложение или ты хочешь запросить возврат — напиши нам напрямую:\n\n👉 @DanilNevsky\n\nОтвечаем в течение 24 часов 💛`,
+      `📞 *Поддержка Малышок*\n\nЕсли у тебя есть вопрос, предложение или ты хочешь запросить возврат — напиши нам напрямую:\n\n👉 @malyshok_support\n\nОтвечаем в течение 24 часов 💛`,
       { parse_mode: 'Markdown' }
     );
     return;
@@ -420,6 +457,7 @@ bot.on('message', async (msg) => {
           [{ text: '👶 Изменить имя ребёнка', callback_data: 'edit_child' }],
           [{ text: '🎂 Изменить дату рождения', callback_data: 'edit_date' }],
           
+          [{ text: '⏰ Настроить время рассылки', callback_data: 'edit_time_new' }],
           [{ text: '⏸ Приостановить рассылку', callback_data: 'pause_notify' }],
         ]
       }
@@ -565,6 +603,20 @@ bot.on('callback_query', async (query) => {
     return;
   }
 
+  if (data === 'edit_time_new') {
+    session.step = 'edit_notify_hour';
+    await bot.sendMessage(chatId, 'В котором часу тебе удобно получать сообщения? ⏰\n\nНапиши время в формате ЧЧ:00, например: 8:00 или 21:00', {
+      reply_markup: {
+        keyboard: [
+          ['7:00', '8:00', '9:00', '10:00'],
+          ['11:00', '12:00', '18:00', '20:00'],
+        ],
+        resize_keyboard: true
+      }
+    });
+    return;
+  }
+
   if (data === 'pause_notify') {
     await saveUser(userId, { paused: true });
     await bot.sendMessage(chatId, 'Рассылка приостановлена ⏸\n\nЧтобы возобновить — напиши /resume');
@@ -645,15 +697,26 @@ bot.on('callback_query', async (query) => {
 
 // ─── ЕЖЕДНЕВНАЯ РАССЫЛКА ─────────────────────────────────────
 
-cron.schedule('0 7 * * *', async () => {
+// Cron каждый час — проверяем у кого сейчас нужное время
+cron.schedule('0 * * * *', async () => {
   const users = await getAllUsers();
+  const nowUtc = DateTime.utc();
 
   for (const user of users) {
     if (!user.onboardingComplete) continue;
     if (user.paused) continue;
 
+    // Определяем текущий час пользователя
+    const userTz = user.timezone || 'Europe/Moscow';
+    const userNow = nowUtc.setZone(userTz);
+    const userHour = userNow.hour;
+    const targetHour = user.notifyHour !== undefined
+      ? Math.round(((user.notifyHour + (user.utcOffset || 3)) + 24) % 24)
+      : 10; // дефолт 10:00 по Москве
+
+    if (userHour !== targetHour) continue;
+
     if (!isSubscriptionActive(user)) {
-      // Триал активен — шлём рассылку
       if (isTrialActive(user)) {
         try {
           const message = await generateDailyMessage(user);
@@ -662,12 +725,9 @@ cron.schedule('0 7 * * *', async () => {
           console.error(`Ошибка рассылки для ${user.telegramId}:`, e.message);
         }
       }
-      // Триал закончился и нет подписки — НЕ шлём рассылку
-      // Уведомление об окончании триала уже было отправлено отдельно
       continue;
     }
 
-    // Подписка активна — шлём рассылку
     try {
       const message = await generateDailyMessage(user);
       await bot.sendMessage(user.telegramId, message);
@@ -701,7 +761,7 @@ cron.schedule('0 10 * * *', async () => {
 
 
 // ─── АДМИН: ТВОЙ TELEGRAM ID ────────────────────────────────
-const ADMIN_ID = '271033356';
+const ADMIN_ID = 'ВСТАВЬ_СВОЙ_TELEGRAM_ID';
 
 // ─── КОМАНДА /broadcast ─────────────────────────────────────
 bot.onText(/\/broadcast (.+)/, async (msg, match) => {

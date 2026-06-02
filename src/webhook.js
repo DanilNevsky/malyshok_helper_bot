@@ -1,5 +1,6 @@
 const express = require('express');
 const { saveUser, getUser, addQuestions } = require('./database');
+const { generateDailyMessage } = require('./claude');
 
 const app = express();
 app.use(express.json());
@@ -34,11 +35,16 @@ app.post('/webhook/yookassa', async (req, res) => {
 
       if (global.bot) {
         const updatedUser = await getUser(userId);
-        await global.bot.sendMessage(userId,
-          `✅ Оплата прошла успешно!\n\nПодписка активна до ${end.toLocaleDateString('ru-RU')} 🎉\nБаланс вопросов: ${updatedUser.questionsBalance} 💬\n\nКаждое утро тебя ждёт новый совет, и ты можешь задавать вопросы прямо сейчас 💛`,
+  await global.bot.sendMessage(userId,
+          `✅ Оплата прошла успешно!\n\nПодписка активна до ${end.toLocaleDateString('ru-RU')} 🎉\nБаланс вопросов: ${updatedUser.questionsBalance} 💬\n\nЕжедневные советы возобновятся завтра утром — и ты уже можешь задавать вопросы прямо сейчас 💛`,
           { reply_markup: { keyboard: [['💬 Спросить Малышка'], ['📊 Мой профиль', '⚙️ Настройки'], ['💳 Подписка']], resize_keyboard: true } }
         );
         if (global.sessions) global.sessions[userId] = { step: 'active' };
+        // Сразу отправляем пропущенную рассылку
+        try {
+          const dailyMsg = await generateDailyMessage(updatedUser);
+          await global.bot.sendMessage(userId, dailyMsg);
+        } catch (e) { console.error('daily after payment error:', e.message); }
       }
 
     } else if (plan === 'year') {
@@ -55,10 +61,15 @@ app.post('/webhook/yookassa', async (req, res) => {
       if (global.bot) {
         const updatedUser = await getUser(userId);
         await global.bot.sendMessage(userId,
-          `✅ Оплата прошла успешно!\n\nГодовая подписка активна до ${end.toLocaleDateString('ru-RU')} 🎉\nБаланс вопросов: ${updatedUser.questionsBalance} 💬\n\nЦелый год вместе! 💛`,
+          `✅ Оплата прошла успешно!\n\nГодовая подписка активна до ${end.toLocaleDateString('ru-RU')} 🎉\nБаланс вопросов: ${updatedUser.questionsBalance} 💬\n\nЕжедневные советы возобновятся завтра утром — целый год вместе! 💛`,
           { reply_markup: { keyboard: [['💬 Спросить Малышка'], ['📊 Мой профиль', '⚙️ Настройки'], ['💳 Подписка']], resize_keyboard: true } }
         );
         if (global.sessions) global.sessions[userId] = { step: 'active' };
+        // Сразу отправляем пропущенную рассылку
+        try {
+          const dailyMsg = await generateDailyMessage(updatedUser);
+          await global.bot.sendMessage(userId, dailyMsg);
+        } catch (e) { console.error('daily after payment error:', e.message); }
       }
 
     } else if (plan === 'questions') {

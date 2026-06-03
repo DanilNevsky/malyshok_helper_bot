@@ -61,8 +61,12 @@ const getKnowledgeBlock = (ageInDays) => {
   if (ageInDays <= 28)   return 'block-1-newborn-0-4weeks.md';
   if (ageInDays <= 180)  return 'block-2-infant-1-6months.md';
   if (ageInDays <= 365)  return 'block-3-infant-6-12months.md';
-  if (ageInDays <= 1095) return 'block-4-toddler-1-3years.md';
-  if (ageInDays <= 1825) return 'block-5-preschool-3-5years.md';
+  if (ageInDays <= 547)  return 'block-4-1-toddler-12-18months.md';
+  if (ageInDays <= 729)  return 'block-4-2-toddler-18-24months.md';
+  if (ageInDays <= 912)  return 'block-4-3-toddler-24-30months.md';
+  if (ageInDays <= 1095) return 'block-4-4-toddler-30-36months.md';
+  if (ageInDays <= 1460) return 'block-5-1-preschool-3-4years.md';
+  if (ageInDays <= 1825) return 'block-5-2-preschool-4-5years.md';
   return null; // ребёнок старше 5 лет
 };
 

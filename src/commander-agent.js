@@ -125,10 +125,11 @@ const sendDailyPlan = async () => {
 };
 
 // Каждый день в 9:00 МСК (6:00 UTC)
-cron.schedule('0 6 * * *', async () => {
+cron.schedule('0 2 * * *', async () => {
   await sendDailyPlan();
 });
 
 console.log('[commander] Запущен. План дня приходит каждое утро в 9:00 МСК.');
 
 module.exports = { sendDailyPlan };
+

@@ -868,3 +868,11 @@ if (process.env.ADMIN_TELEGRAM_ID) {
   require('./commander-agent');
   console.log('[commander] Подключён');
 }
+
+// Команда /plan — получить план дня прямо сейчас
+bot.onText(/\/plan/, async (msg) => {
+  if (String(msg.from.id) !== ADMIN_ID) return;
+  await bot.sendMessage(msg.chat.id, 'Генерирую план дня, подожди 15 секунд... ⏳');
+  const { sendDailyPlan } = require('./commander-agent');
+  await sendDailyPlan();
+});

@@ -223,15 +223,11 @@ bot.on('message', async (msg) => {
     if (isNaN(birthDate.getTime()) || birthDate > new Date()) {
       await bot.sendMessage(chatId, 'Дата выглядит неверной. Проверь и напиши ещё раз 😊');
       return;
+    }
     const ageInDays = (new Date() - birthDate) / (1000 * 60 * 60 * 24);
     if (ageInDays > 365 * 5) {
-      await bot.sendMessage(chatId, 'Малышок рассчитан на детей до 5 лет 🌸
-
-Если твоему ребёнку больше 5 лет — к сожалению, наша программа ему уже не подходит.
-
-Если ты ошиблась с датой — напиши её ещё раз в формате ДД.ММ.ГГГГ');
+      await bot.sendMessage(chatId, 'Малышок рассчитан на детей до 5 лет 🌸\n\nЕсли твоему ребёнку больше 5 лет — к сожалению, наша программа ему уже не подходит.\n\nЕсли ты ошиблась с датой — напиши её ещё раз в формате ДД.ММ.ГГГГ');
       return;
-    }
     }
     session.childBirthDate = birthDate.toISOString();
     // Сразу сохраняем — время и регион фиксированные

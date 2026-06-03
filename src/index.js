@@ -787,25 +787,52 @@ cron.schedule('0 10 * * *', async () => {
 const ADMIN_ID = process.env.ADMIN_TELEGRAM_ID || 'ВСТАВЬ_СВОЙ_TELEGRAM_ID';
 
 // ─── КОМАНДА /broadcast ─────────────────────────────────────
+// Формат: /broadcast Полный текст совета | Короткий тизер для неактивных
+// Если разделитель | не указан — всем шлётся одинаковый текст
 bot.onText(/\/broadcast (.+)/, async (msg, match) => {
   if (String(msg.from.id) !== ADMIN_ID) {
     await bot.sendMessage(msg.chat.id, 'Нет доступа');
     return;
   }
-  const broadcastText = match[1];
+  const parts = match[1].split('|');
+  const fullText = parts[0].trim();
+  const teaserText = parts[1] ? parts[1].trim() : null;
+
   const allUsers = await getAllUsers();
-  let sent = 0;
+  let sentFull = 0;
+  let sentTeaser = 0;
   let failed = 0;
+
   await bot.sendMessage(msg.chat.id, `Начинаю рассылку для ${allUsers.length} пользователей...`);
+
   for (const u of allUsers) {
     if (!u.onboardingComplete) continue;
+    const isActive = isSubscriptionActive(u) || isTrialActive(u);
     try {
-      await bot.sendMessage(u.telegramId, broadcastText, { parse_mode: 'Markdown' });
-      sent++;
+      if (isActive) {
+        await bot.sendMessage(u.telegramId, fullText, { parse_mode: 'Markdown' });
+        sentFull++;
+      } else if (teaserText) {
+        await bot.sendMessage(u.telegramId,
+          teaserText + '\n\n_Хочешь получать такие советы каждый день персонально под возраст твоего малыша?_',
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '💫 Попробовать за 299 ₽/мес', callback_data: 'pay_month' }],
+                [{ text: '🌟 Год за 2 490 ₽', callback_data: 'pay_year' }],
+              ]
+            }
+          }
+        );
+        sentTeaser++;
+      }
       await new Promise(r => setTimeout(r, 50));
     } catch (e) { failed++; }
   }
-  await bot.sendMessage(msg.chat.id, `✅ Готово! Отправлено: ${sent}, ошибок: ${failed}`);
+  await bot.sendMessage(msg.chat.id,
+    `✅ Готово!\nПолный совет: ${sentFull}\nТизер: ${sentTeaser}\nОшибок: ${failed}`
+  );
 });
 
 // ─── КОМАНДА /stats ──────────────────────────────────────────

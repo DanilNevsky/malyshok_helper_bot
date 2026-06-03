@@ -784,7 +784,7 @@ cron.schedule('0 10 * * *', async () => {
 
 
 // ─── АДМИН: ТВОЙ TELEGRAM ID ────────────────────────────────
-const ADMIN_ID = 'ВСТАВЬ_СВОЙ_TELEGRAM_ID';
+const ADMIN_ID = process.env.ADMIN_TELEGRAM_ID || 'ВСТАВЬ_СВОЙ_TELEGRAM_ID';
 
 // ─── КОМАНДА /broadcast ─────────────────────────────────────
 bot.onText(/\/broadcast (.+)/, async (msg, match) => {

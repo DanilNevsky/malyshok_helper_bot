@@ -111,7 +111,8 @@ ${knowledge}
     messages: [{ role: 'user', content: prompt }],
   });
 
-  return response.content[0].text;
+  const textBlock = response.content.find(b => b.type === 'text');
+  return textBlock ? textBlock.text.trim() : '';
 };
 
 // Ответ на вопрос мамы
@@ -152,7 +153,8 @@ ${knowledge || 'База знаний для этого возраста нед�
     messages: [{ role: 'user', content: prompt }],
   });
 
-  return response.content[0].text;
+  const textBlock = response.content.find(b => b.type === 'text');
+  return textBlock ? textBlock.text.trim() : '';
 };
 
 
@@ -190,7 +192,8 @@ const generateWelcomeMessage = async (user) => {
     max_tokens: 1000,
     messages: [{ role: 'user', content: prompt }],
   });
-  return response.content[0].text;
+  const textBlock = response.content.find(b => b.type === 'text');
+  return textBlock ? textBlock.text.trim() : '';
 };
 
 module.exports = { generateDailyMessage, answerQuestion, generateWelcomeMessage };

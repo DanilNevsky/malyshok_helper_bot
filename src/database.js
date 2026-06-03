@@ -76,6 +76,7 @@ const mapFromDB = (row) => ({
   timezone: row.timezone || 'Europe/Moscow',
   paused: row.paused,
   onboardingComplete: row.onboarding_complete,
+  firstQuestionSent: row.first_question_sent || false,
 });
 
 const mapToDB = (telegramId, userData, existing) => {
@@ -95,6 +96,7 @@ const mapToDB = (telegramId, userData, existing) => {
     timezone: merged.timezone ?? existing?.timezone ?? 'Europe/Moscow',
     paused: merged.paused ?? existing?.paused ?? false,
     onboarding_complete: merged.onboardingComplete ?? existing?.onboardingComplete ?? false,
+    first_question_sent: merged.firstQuestionSent ?? existing?.firstQuestionSent ?? false,
     updated_at: new Date().toISOString(),
   };
 };

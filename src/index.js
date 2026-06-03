@@ -8,6 +8,7 @@ const { findTimezone } = require('./timezones');
 const { DateTime } = require('luxon');
 const { createMonthlyPayment, createYearlyPayment, createQuestionsPayment } = require('./payment');
 const { startWebhookServer } = require('./webhook');
+const { FIRST_QUESTION_NUDGE } = require('./messages');
 
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 
@@ -811,6 +812,36 @@ bot.onText(/\/stats/, async (msg) => {
     `📊 *Статистика Малышок*\n\n👥 Всего: ${allUsers.length}\n✅ Подписок: ${activeSubs}\n🆓 Триал: ${trialUsers}\n❌ Без подписки: ${expired}`,
     { parse_mode: 'Markdown' }
   );
+});
+
+// Касание через 24 часа после регистрации — приглашение попробовать Q&A
+cron.schedule('30 * * * *', async () => {
+  const users = await getAllUsers();
+  const now = new Date();
+  for (const user of users) {
+    if (!user.onboardingComplete) continue;
+    if (user.firstQuestionSent) continue;
+    if (!user.trialStart) continue;
+    const hoursElapsed = (now - new Date(user.trialStart)) / (1000 * 60 * 60);
+    if (hoursElapsed < 20 || hoursElapsed > 48) continue;
+    // Отправляем только если ни разу не пользовался Q&A (баланс не тронут)
+    const balance = await getQuestionsBalance(user.telegramId);
+    if (balance < 5) continue; // уже спрашивал — не нужно напоминать
+    try {
+      await bot.sendMessage(user.telegramId,
+        FIRST_QUESTION_NUDGE(user.momName, user.childName),
+        {
+          reply_markup: {
+            keyboard: [['💬 Спросить Малышка'], ['📊 Мой профиль', '⚙️ Настройки'], ['💳 Подписка', '📞 Поддержка']],
+            resize_keyboard: true
+          }
+        }
+      );
+      await saveUser(user.telegramId, { firstQuestionSent: true });
+    } catch (e) {
+      console.error(`Ошибка nudge для ${user.telegramId}:`, e.message);
+    }
+  }
 });
 
 console.log('🤖 Малышок запущен!');

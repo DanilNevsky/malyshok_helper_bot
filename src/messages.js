@@ -59,6 +59,12 @@ const OVER_5_YEARS = (momName, childName) => `${momName}, ${childName} выро�
 
 Ты прошла потрясающий путь! Удачи вам обоим 🌟`;
 
+const FIRST_QUESTION_NUDGE = (momName, childName) => `${momName}, кстати 👇
+
+Нажми и спроси меня всё что хочешь про ${childName} — во что поиграть, почему капризничает, как пережить этот возраст 😄
+
+Отвечу честно и конкретно, с учётом сколько сейчас месяцев твоему ребёнку 🤍`;
+
 module.exports = {
   WELCOME,
   OFERTA,
@@ -67,4 +73,5 @@ module.exports = {
   QUESTIONS_LIMIT,
   MEDICAL_REDIRECT,
   OVER_5_YEARS,
+  FIRST_QUESTION_NUDGE,
 };

@@ -854,3 +854,17 @@ cron.schedule('30 * * * *', async () => {
 console.log('🤖 Малышок запущен!');
 global.bot = bot;
 startWebhookServer(process.env.PORT || 3000);
+
+// Контент-агент для Threads (запускается только если токен задан)
+if (process.env.THREADS_ACCESS_TOKEN && process.env.THREADS_USER_ID) {
+  require('./content-agent');
+  console.log('[content-agent] Подключён');
+} else {
+  console.log('[content-agent] Пропущен — нет THREADS_ACCESS_TOKEN или THREADS_USER_ID');
+}
+
+// Агент-командир — ежедневный план действий для Данила
+if (process.env.ADMIN_TELEGRAM_ID) {
+  require('./commander-agent');
+  console.log('[commander] Подключён');
+}

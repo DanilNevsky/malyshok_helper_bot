@@ -77,6 +77,7 @@ const mapFromDB = (row) => ({
   paused: row.paused,
   onboardingComplete: row.onboarding_complete,
   firstQuestionSent: row.first_question_sent || false,
+  trialEndNotified: row.trial_end_notified || false,
 });
 
 const mapToDB = (telegramId, userData, existing) => {
@@ -97,6 +98,7 @@ const mapToDB = (telegramId, userData, existing) => {
     paused: merged.paused ?? existing?.paused ?? false,
     onboarding_complete: merged.onboardingComplete ?? existing?.onboardingComplete ?? false,
     first_question_sent: merged.firstQuestionSent ?? existing?.firstQuestionSent ?? false,
+    trial_end_notified: merged.trialEndNotified ?? existing?.trialEndNotified ?? false,
     updated_at: new Date().toISOString(),
   };
 };

@@ -733,20 +733,23 @@ cron.schedule('0 * * * *', async () => {
           console.error(`Ошибка рассылки для ${user.telegramId}:`, e.message);
         }
       } else {
-        // Триал закончился — уведомляем один раз в день вместо рассылки
-        try {
-          await bot.sendMessage(user.telegramId,
-            `${user.momName}, твой пробный период закончился 🌸\n\nЧтобы продолжить получать ежедневные советы и задавать вопросы — оформи подписку:\n\n💫 299 ₽/месяц — рассылка + 30 вопросов\n🌟 2 490 ₽/год — экономия 2 месяца`,
-            {
-              reply_markup: {
-                inline_keyboard: [
-                  [{ text: '💫 Оплатить 299 ₽/мес', callback_data: 'pay_month' }],
-                  [{ text: '🌟 Оплатить 2 490 ₽/год', callback_data: 'pay_year' }],
-                ]
+        // Триал закончился — уведомляем только один раз
+        if (!user.trialEndNotified) {
+          try {
+            await bot.sendMessage(user.telegramId,
+              `${user.momName}, твой пробный период закончился 🌸\n\nЧтобы продолжить получать ежедневные советы и задавать вопросы — оформи подписку:\n\n💫 299 ₽/месяц — рассылка + 30 вопросов\n🌟 2 490 ₽/год — экономия 2 месяца`,
+              {
+                reply_markup: {
+                  inline_keyboard: [
+                    [{ text: '💫 Оплатить 299 ₽/мес', callback_data: 'pay_month' }],
+                    [{ text: '🌟 Оплатить 2 490 ₽/год', callback_data: 'pay_year' }],
+                  ]
+                }
               }
-            }
-          );
-        } catch (e) { console.error(e); }
+            );
+            await saveUser(user.telegramId, { trialEndNotified: true });
+          } catch (e) { console.error(e); }
+        }
       }
       continue;
     }
